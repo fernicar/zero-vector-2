@@ -1,10 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
-const { logger, logError } = require('../utils/logger');
-
-/**
- * Persona Memory Manager
- * Handles AI persona memory storage, retrieval, and lifecycle management
- */
+const { logger, logError } = require('..__LITERAL_0__logger');
 class PersonaMemoryManager {
   constructor(database, vectorStore, embeddingService) {
     this.database = database;
@@ -18,21 +13,14 @@ class PersonaMemoryManager {
       SYSTEM: 'system'
     };
   }
-
-  /**
-   * Create a new AI persona
-   */
   async createPersona(userId, personaData) {
     try {
       const personaId = uuidv4();
-      
-      // Validate numeric inputs
       const maxMemorySize = typeof personaData.maxMemorySize === 'number' ? personaData.maxMemorySize : 1000;
       const memoryDecayTime = typeof personaData.memoryDecayTime === 'number' ? personaData.memoryDecayTime : (7 * 24 * 60 * 60 * 1000);
       const temperature = typeof personaData.temperature === 'number' ? personaData.temperature : 0.7;
       const maxTokens = typeof personaData.maxTokens === 'number' ? personaData.maxTokens : 2048;
       const memoryRetrievalThreshold = typeof personaData.memoryRetrievalThreshold === 'number' ? personaData.memoryRetrievalThreshold : 0.7;
-
       const persona = {
         id: personaId,
         userId: userId,
@@ -51,33 +39,14 @@ class PersonaMemoryManager {
         memoryDecayTime: memoryDecayTime,
         isActive: true
       };
-
-      // Insert persona into database
       await this.database.insertPersona(persona);
-
-      // Log persona creation (temporarily disabled to fix timestamp issue)
-      // await this.database.insertAuditLog({
-      //   id: uuidv4(),
-      //   userId: userId,
-      //   action: 'CREATE_PERSONA',
-      //   resourceType: 'persona',
-      //   resourceId: personaId,
-      //   details: {
-      //     name: persona.name,
-      //     maxMemorySize: persona.maxMemorySize,
-      //     memoryDecayTime: persona.memoryDecayTime
-      //   }
-      // });
-
       logger.info('Persona created successfully', {
         personaId,
         userId,
         name: persona.name,
         maxMemorySize: persona.maxMemorySize
       });
-
       return persona;
-
     } catch (error) {
       logError(error, {
         operation: 'createPersona',
@@ -87,25 +56,16 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Get persona by ID
-   */
   async getPersona(personaId, userId = null) {
     try {
       const persona = await this.database.getPersonaById(personaId);
-      
       if (!persona) {
         throw new Error('Persona not found');
       }
-
-      // Verify ownership if userId provided
       if (userId && persona.user_id !== userId) {
         throw new Error('Access denied: Persona does not belong to user');
       }
-
       return this.formatPersonaResponse(persona);
-
     } catch (error) {
       logError(error, {
         operation: 'getPersona',
@@ -115,14 +75,9 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * List user personas
-   */
   async listPersonas(userId, includeInactive = false) {
     try {
       const personas = await this.database.listPersonas(userId, includeInactive);
-      
       const formattedPersonas = await Promise.all(
         personas.map(async (persona) => {
           const stats = await this.getPersonaMemoryStats(persona.id);
@@ -132,9 +87,7 @@ class PersonaMemoryManager {
           };
         })
       );
-
       return formattedPersonas;
-
     } catch (error) {
       logError(error, {
         operation: 'listPersonas',
@@ -143,15 +96,9 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Update persona
-   */
   async updatePersona(personaId, userId, updates) {
     try {
-      // Verify ownership
       const existingPersona = await this.getPersona(personaId, userId);
-      
       const allowedUpdates = {
         name: updates.name,
         description: updates.description,
@@ -160,26 +107,18 @@ class PersonaMemoryManager {
         memoryDecayTime: updates.memoryDecayTime,
         isActive: updates.isActive
       };
-
-      // Handle config updates
       if (updates.config) {
         allowedUpdates.config = {
           ...existingPersona.config,
           ...updates.config
         };
       }
-
-      // Remove undefined values
       Object.keys(allowedUpdates).forEach(key => {
         if (allowedUpdates[key] === undefined) {
           delete allowedUpdates[key];
         }
       });
-
-      // Update in database
       await this.database.updatePersona(personaId, allowedUpdates);
-
-      // Log update
       await this.database.insertAuditLog({
         id: uuidv4(),
         userId: userId,
@@ -188,15 +127,12 @@ class PersonaMemoryManager {
         resourceId: personaId,
         details: allowedUpdates
       });
-
       logger.info('Persona updated successfully', {
         personaId,
         userId,
         updates: Object.keys(allowedUpdates)
       });
-
       return await this.getPersona(personaId, userId);
-
     } catch (error) {
       logError(error, {
         operation: 'updatePersona',
@@ -206,22 +142,11 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Delete persona
-   */
   async deletePersona(personaId, userId) {
     try {
-      // Verify ownership
       await this.getPersona(personaId, userId);
-
-      // Soft delete persona
       await this.database.deletePersona(personaId);
-
-      // Clean up all memories for this persona
       await this.cleanupPersonaMemories(personaId);
-
-      // Log deletion
       await this.database.insertAuditLog({
         id: uuidv4(),
         userId: userId,
@@ -230,9 +155,7 @@ class PersonaMemoryManager {
         resourceId: personaId,
         details: { action: 'soft_delete' }
       });
-
       logger.info('Persona deleted successfully', { personaId, userId });
-
     } catch (error) {
       logError(error, {
         operation: 'deletePersona',
@@ -242,28 +165,19 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Add memory to persona
-   */
   async addMemory(personaId, content, context = {}) {
     try {
       const persona = await this.database.getPersonaById(personaId);
       if (!persona) {
         throw new Error('Persona not found');
       }
-
-      // Generate embedding for the content
       const provider = persona.config.embeddingProvider || 'local';
       const model = persona.config.embeddingModel || (provider === 'openai' ? 'text-embedding-3-small' : 'all-MiniLM-L6-v2');
-      
       const embeddingResult = await this.embeddingService.generateEmbedding(content, {
         provider: provider,
         model: model,
         useCache: true
       });
-
-      // Create memory metadata
       const memoryId = uuidv4();
       const timestamp = Date.now();
       const memoryMetadata = {
@@ -278,15 +192,11 @@ class PersonaMemoryManager {
         embeddingModel: embeddingResult.model,
         context: context
       };
-
-      // Store vector in vector store
       const storeResult = await this.vectorStore.addVector(
         embeddingResult.vector,
         memoryId,
         memoryMetadata
       );
-
-      // Store metadata in database
       await this.database.insertVectorMetadata({
         id: memoryId,
         dimensions: embeddingResult.vector.length,
@@ -296,17 +206,13 @@ class PersonaMemoryManager {
         tags: [context.type || this.memoryTypes.CONVERSATION],
         customMetadata: memoryMetadata
       });
-
-      // Check memory limits and cleanup if necessary
       await this.enforceMemoryLimits(personaId);
-
       logger.info('Memory added to persona', {
         personaId,
         memoryId,
         memoryType: memoryMetadata.memoryType,
         contentLength: content.length
       });
-
       return {
         id: memoryId,
         content: content,
@@ -314,7 +220,6 @@ class PersonaMemoryManager {
         timestamp: memoryMetadata.timestamp,
         slotIndex: storeResult.slotIndex
       };
-
     } catch (error) {
       logError(error, {
         operation: 'addMemory',
@@ -324,10 +229,6 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Retrieve relevant memories for a query
-   */
   async retrieveRelevantMemories(personaId, query, options = {}) {
     try {
       logger.info('Starting retrieveRelevantMemories', {
@@ -335,7 +236,6 @@ class PersonaMemoryManager {
         query: query.substring(0, 50),
         options
       });
-
       const {
         limit = 5,
         threshold = 0.7,
@@ -343,25 +243,19 @@ class PersonaMemoryManager {
         maxAge = null,
         includeContext = true
       } = options;
-
       const persona = await this.database.getPersonaById(personaId);
       if (!persona) {
         throw new Error('Persona not found');
       }
-
-      // Generate query embedding
       const provider = persona.config.embeddingProvider || 'local';
       const model = persona.config.embeddingModel || (provider === 'openai' ? 'text-embedding-3-small' : 'all-MiniLM-L6-v2');
-      
       const queryEmbedding = await this.embeddingService.generateEmbedding(query, {
         provider: provider,
         model: model,
         useCache: true
       });
-
-      // Search for similar memories
       const searchResults = await this.vectorStore.search(queryEmbedding.vector, {
-        limit: limit * 2, // Get more to filter
+        limit: limit * 2,
         threshold: threshold,
         metric: 'cosine',
         filters: { personaId: personaId },
@@ -369,36 +263,24 @@ class PersonaMemoryManager {
         includeMetadata: true,
         useIndex: true
       });
-
-      // Filter and enrich results
       let filteredResults = searchResults;
-
-      // Filter by memory types if specified
       if (memoryTypes && Array.isArray(memoryTypes)) {
-        filteredResults = filteredResults.filter(result => 
+        filteredResults = filteredResults.filter(result =>
           memoryTypes.includes(result.metadata.memoryType)
         );
       }
-
-      // Filter by age if specified
       if (maxAge) {
         const cutoffTime = Date.now() - maxAge;
-        filteredResults = filteredResults.filter(result => 
+        filteredResults = filteredResults.filter(result =>
           result.metadata.timestamp >= cutoffTime
         );
       }
-
-      // Sort by relevance and recency
       filteredResults.sort((a, b) => {
         const scoreA = a.similarity + (a.metadata.importance || 0.5) * 0.1;
         const scoreB = b.similarity + (b.metadata.importance || 0.5) * 0.1;
         return scoreB - scoreA;
       });
-
-      // Limit final results
       filteredResults = filteredResults.slice(0, limit);
-
-      // Debug: Log what we got from vector search before enrichment
       logger.info('Vector search results before enrichment', {
         personaId,
         resultCount: filteredResults.length,
@@ -408,37 +290,30 @@ class PersonaMemoryManager {
           hasMetadata: !!r.metadata,
           metadataKeys: r.metadata ? Object.keys(r.metadata) : [],
           hasOriginalContent: !!(r.metadata && r.metadata.originalContent),
-          originalContentPreview: r.metadata && r.metadata.originalContent ? 
+          originalContentPreview: r.metadata && r.metadata.originalContent ?
             r.metadata.originalContent.substring(0, 50) + '...' : 'MISSING'
         }))
       });
-
-      // Enrich with database metadata if needed
       if (includeContext) {
         for (const result of filteredResults) {
           try {
-            // First check if originalContent is already available from vector store
             if (!result.metadata.originalContent) {
               logger.info('Missing originalContent in vector metadata, fetching from database', {
                 memoryId: result.id,
                 vectorMetadataKeys: Object.keys(result.metadata || {})
               });
-              
               const dbMetadata = await this.database.getVectorMetadata(result.id);
               if (dbMetadata && dbMetadata.customMetadata) {
-                // Merge the custom metadata which contains originalContent
-                result.metadata = { 
-                  ...result.metadata, 
+                result.metadata = {
+                  ...result.metadata,
                   ...dbMetadata.customMetadata,
-                  // Ensure originalContent is directly accessible
                   originalContent: dbMetadata.customMetadata.originalContent
                 };
-                
                 logger.info('Enriched memory metadata from database', {
                   memoryId: result.id,
                   hasOriginalContent: !!dbMetadata.customMetadata.originalContent,
                   customMetadataKeys: Object.keys(dbMetadata.customMetadata || {}),
-                  originalContentLength: dbMetadata.customMetadata.originalContent ? 
+                  originalContentLength: dbMetadata.customMetadata.originalContent ?
                     dbMetadata.customMetadata.originalContent.length : 0
                 });
               } else {
@@ -463,8 +338,6 @@ class PersonaMemoryManager {
           }
         }
       }
-
-      // Debug: Log final results after enrichment
       logger.info('Final enriched results', {
         personaId,
         resultCount: filteredResults.length,
@@ -472,23 +345,20 @@ class PersonaMemoryManager {
           id: r.id,
           similarity: r.similarity,
           hasOriginalContent: !!(r.metadata && r.metadata.originalContent),
-          originalContentPreview: r.metadata && r.metadata.originalContent ? 
+          originalContentPreview: r.metadata && r.metadata.originalContent ?
             r.metadata.originalContent.substring(0, 50) + '...' : 'STILL MISSING',
           metadataKeys: r.metadata ? Object.keys(r.metadata) : []
         }))
       });
-
       logger.info('Retrieved relevant memories', {
         personaId,
         query: query.substring(0, 100),
         resultCount: filteredResults.length,
-        avgSimilarity: filteredResults.length > 0 
+        avgSimilarity: filteredResults.length > 0
           ? (filteredResults.reduce((sum, r) => sum + r.similarity, 0) / filteredResults.length).toFixed(3)
           : 0
       });
-
       return filteredResults;
-
     } catch (error) {
       logError(error, {
         operation: 'retrieveRelevantMemories',
@@ -498,16 +368,10 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Add conversation exchange to memory
-   */
   async addConversationExchange(personaId, userMessage, assistantResponse, conversationId = null) {
     try {
       const convId = conversationId || uuidv4();
       const timestamp = Date.now();
-
-      // Add user message memory
       const userMemory = await this.addMemory(personaId, userMessage, {
         type: this.memoryTypes.CONVERSATION,
         conversationId: convId,
@@ -515,8 +379,6 @@ class PersonaMemoryManager {
         importance: 0.6,
         exchange_type: 'user_input'
       });
-
-      // Add assistant response memory
       const assistantMemory = await this.addMemory(personaId, assistantResponse, {
         type: this.memoryTypes.CONVERSATION,
         conversationId: convId,
@@ -524,21 +386,18 @@ class PersonaMemoryManager {
         importance: 0.5,
         exchange_type: 'assistant_response'
       });
-
       logger.info('Conversation exchange added to memory', {
         personaId,
         conversationId: convId,
         userMessageLength: userMessage.length,
         assistantResponseLength: assistantResponse.length
       });
-
       return {
         conversationId: convId,
         userMemory,
         assistantMemory,
         timestamp
       };
-
     } catch (error) {
       logError(error, {
         operation: 'addConversationExchange',
@@ -548,19 +407,12 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Get conversation history
-   */
   async getConversationHistory(personaId, conversationId, limit = 20) {
     try {
-      // Search for memories with the specific conversation ID
       const memories = await this.database.searchVectorMetadata({
         personaId: personaId,
-        limit: limit * 2 // Get more to sort properly
+        limit: limit * 2
       });
-
-      // Filter by conversation ID and sort by timestamp with null checks
       const conversationMemories = memories
         .filter(memory => {
           const customMeta = memory.customMetadata || {};
@@ -573,13 +425,11 @@ class PersonaMemoryManager {
           return timestampA - timestampB;
         })
         .slice(0, limit);
-
       logger.info('Retrieved conversation history', {
         personaId,
         conversationId,
         memoryCount: conversationMemories.length
       });
-
       return conversationMemories.map(memory => {
         const customMeta = memory.customMetadata || {};
         return {
@@ -590,7 +440,6 @@ class PersonaMemoryManager {
           type: customMeta.exchange_type || 'unknown'
         };
       });
-
     } catch (error) {
       logError(error, {
         operation: 'getConversationHistory',
@@ -600,17 +449,12 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Get persona memory statistics
-   */
   async getPersonaMemoryStats(personaId) {
     try {
       const memories = await this.database.searchVectorMetadata({
         personaId: personaId,
-        limit: 10000 // Get all for counting
+        limit: 10000
       });
-
       const stats = {
         totalMemories: memories.length,
         memoryTypeBreakdown: {},
@@ -619,37 +463,28 @@ class PersonaMemoryManager {
         averageImportance: 0,
         conversationCount: 0
       };
-
       if (memories.length > 0) {
-        // Calculate type breakdown with null checks
         memories.forEach(memory => {
           const customMeta = memory.customMetadata || {};
           const type = customMeta.memoryType || 'unknown';
           stats.memoryTypeBreakdown[type] = (stats.memoryTypeBreakdown[type] || 0) + 1;
         });
-
-        // Find oldest and newest with proper null handling
         const validTimestamps = memories
           .map(m => (m.customMetadata || {}).timestamp)
           .filter(timestamp => timestamp && typeof timestamp === 'number');
-        
         if (validTimestamps.length > 0) {
           stats.oldestMemory = Math.min(...validTimestamps);
           stats.newestMemory = Math.max(...validTimestamps);
         }
-
-        // Calculate average importance with null checks
         const importanceSum = memories.reduce(
           (sum, memory) => {
             const customMeta = memory.customMetadata || {};
             const importance = customMeta.importance;
             return sum + (typeof importance === 'number' ? importance : 0.5);
-          }, 
+          },
           0
         );
         stats.averageImportance = importanceSum / memories.length;
-
-        // Count unique conversations with null checks
         const conversationIds = new Set(
           memories
             .map(m => (m.customMetadata || {}).conversationId)
@@ -657,9 +492,7 @@ class PersonaMemoryManager {
         );
         stats.conversationCount = conversationIds.size;
       }
-
       return stats;
-
     } catch (error) {
       logError(error, {
         operation: 'getPersonaMemoryStats',
@@ -675,53 +508,36 @@ class PersonaMemoryManager {
       };
     }
   }
-
-  /**
-   * Enforce memory limits for a persona
-   */
   async enforceMemoryLimits(personaId) {
     try {
       const persona = await this.database.getPersonaById(personaId);
       if (!persona) return;
-
       const memories = await this.database.searchVectorMetadata({
         personaId: personaId,
         limit: 10000
       });
-
       if (memories.length <= persona.max_memory_size) return;
-
-      // Sort by importance and age (keep important and recent) with null checks
       memories.sort((a, b) => {
         const customMetaA = a.customMetadata || {};
         const customMetaB = b.customMetadata || {};
-        
         const importanceA = typeof customMetaA.importance === 'number' ? customMetaA.importance : 0.5;
         const importanceB = typeof customMetaB.importance === 'number' ? customMetaB.importance : 0.5;
-        
         const timestampA = typeof customMetaA.timestamp === 'number' ? customMetaA.timestamp : Date.now();
         const timestampB = typeof customMetaB.timestamp === 'number' ? customMetaB.timestamp : Date.now();
-        
         const scoreA = importanceA + (1 - (Date.now() - timestampA) / (30 * 24 * 60 * 60 * 1000)) * 0.3;
         const scoreB = importanceB + (1 - (Date.now() - timestampB) / (30 * 24 * 60 * 60 * 1000)) * 0.3;
-        
         return scoreB - scoreA;
       });
-
-      // Remove oldest/least important memories
       const memoriesToRemove = memories.slice(persona.max_memory_size);
-      
       for (const memory of memoriesToRemove) {
         await this.removeMemory(memory.id);
       }
-
       logger.info('Memory limits enforced', {
         personaId,
         totalMemories: memories.length,
         removedCount: memoriesToRemove.length,
         remainingCount: persona.max_memory_size
       });
-
     } catch (error) {
       logError(error, {
         operation: 'enforceMemoryLimits',
@@ -729,85 +545,24 @@ class PersonaMemoryManager {
       });
     }
   }
-
-  /**
-   * Reload all existing memories from database into vector store
-   * This is essential for server restart scenarios
-   */
   async reloadMemoriesFromDatabase() {
     try {
       logger.info('Starting memory reload from database...');
-      
-      // Get all vector metadata from database
       const allMemories = await this.database.searchVectorMetadata({ limit: 50000 });
-      
       if (!allMemories || allMemories.length === 0) {
         logger.info('No existing memories found in database');
         return { reloaded: 0, errors: 0 };
       }
-      
       logger.info('Found memories in database, starting reload process', {
         totalMemories: allMemories.length
       });
-      
       let reloadedCount = 0;
       let errorCount = 0;
-      
-      // Process memories in batches to avoid overwhelming the system
       const batchSize = 50;
       for (let i = 0; i < allMemories.length; i += batchSize) {
         const batch = allMemories.slice(i, i + batchSize);
-        
-        logger.info(`Processing memory batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(allMemories.length/batchSize)}`, {
-          batchStart: i,
-          batchSize: batch.length
-        });
-        
-        for (const memoryRecord of batch) {
-          try {
-            const customMeta = memoryRecord.customMetadata || {};
-            const originalContent = customMeta.originalContent;
-            
-            if (!originalContent) {
-              logger.warn('Memory missing originalContent, skipping', {
-                memoryId: memoryRecord.id,
-                availableKeys: Object.keys(customMeta)
-              });
-              errorCount++;
-              continue;
+        logger.info(`Processing memory batch ${Math.floor(i__LITERAL_3__${Math.ceil(allMemories.length__LITERAL_4__${allMemories.length} memories...`);
             }
-            
-            // Get persona to determine embedding configuration
-            const persona = await this.database.getPersonaById(memoryRecord.persona_id);
-            if (!persona) {
-              logger.warn('Persona not found for memory, skipping', {
-                memoryId: memoryRecord.id,
-                personaId: memoryRecord.persona_id
-              });
-              errorCount++;
-              continue;
-            }
-            
-            // Generate embedding for the content
-            const embeddingResult = await this.embeddingService.generateEmbedding(originalContent, {
-              provider: persona.config.embeddingProvider || 'local',
-              model: persona.config.embeddingModel,
-              useCache: false // Don't use cache during reload
-            });
-            
-            // Add vector back to vector store
-            await this.vectorStore.addVector(
-              embeddingResult.vector,
-              memoryRecord.id,
-              customMeta
-            );
-            
-            reloadedCount++;
-            
-            if (reloadedCount % 10 === 0) {
-              logger.info(`Reloaded ${reloadedCount}/${allMemories.length} memories...`);
-            }
-            
           } catch (error) {
             logger.error('Failed to reload memory', {
               memoryId: memoryRecord.id,
@@ -816,54 +571,37 @@ class PersonaMemoryManager {
             errorCount++;
           }
         }
-        
-        // Small delay between batches to prevent overwhelming
         if (i + batchSize < allMemories.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
-      
       logger.info('Memory reload from database completed', {
         totalFound: allMemories.length,
         reloaded: reloadedCount,
         errors: errorCount,
         vectorStoreCount: this.vectorStore.vectorCount
       });
-      
       return { reloaded: reloadedCount, errors: errorCount };
-      
     } catch (error) {
       logError(error, { operation: 'reloadMemoriesFromDatabase' });
       throw error;
     }
   }
-
-  /**
-   * Cleanup expired memories
-   */
   async cleanupExpiredMemories() {
     try {
       let totalCleaned = 0;
-      
-      // Get all active personas
       const allUsers = await this.database.getStats();
-      
-      // For each user, get their personas and clean up expired memories
-      // This is a simplified approach - in production you'd want to batch this
       const personas = await this.database.searchVectorMetadata({ limit: 10000 });
       const personaIds = [...new Set(personas.map(m => m.persona_id).filter(Boolean))];
-
       for (const personaId of personaIds) {
         try {
           const persona = await this.database.getPersonaById(personaId);
           if (!persona) continue;
-
           const expiredTime = Date.now() - persona.memory_decay_time;
           const memories = await this.database.searchVectorMetadata({
             personaId: personaId,
             limit: 10000
           });
-
           const expiredMemories = memories.filter(
             memory => {
               const customMeta = memory.customMetadata || {};
@@ -871,12 +609,10 @@ class PersonaMemoryManager {
               return typeof timestamp === 'number' && timestamp < expiredTime;
             }
           );
-
           for (const memory of expiredMemories) {
             await this.removeMemory(memory.id);
             totalCleaned++;
           }
-
         } catch (error) {
           logger.warn('Failed to cleanup memories for persona', {
             personaId,
@@ -884,14 +620,11 @@ class PersonaMemoryManager {
           });
         }
       }
-
       logger.info('Memory cleanup completed', {
         totalCleaned,
         processedPersonas: personaIds.length
       });
-
       return { totalCleaned };
-
     } catch (error) {
       logError(error, {
         operation: 'cleanupExpiredMemories'
@@ -899,20 +632,11 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Remove a specific memory
-   */
   async removeMemory(memoryId) {
     try {
-      // Remove from vector store
       await this.vectorStore.deleteVector(memoryId);
-
-      // Remove metadata from database
       await this.database.deleteVectorMetadata(memoryId);
-
       logger.debug('Memory removed', { memoryId });
-
     } catch (error) {
       logError(error, {
         operation: 'removeMemory',
@@ -921,26 +645,19 @@ class PersonaMemoryManager {
       throw error;
     }
   }
-
-  /**
-   * Clean up all memories for a persona
-   */
   async cleanupPersonaMemories(personaId) {
     try {
       const memories = await this.database.searchVectorMetadata({
         personaId: personaId,
         limit: 10000
       });
-
       for (const memory of memories) {
         await this.removeMemory(memory.id);
       }
-
       logger.info('Persona memories cleaned up', {
         personaId,
         removedCount: memories.length
       });
-
     } catch (error) {
       logError(error, {
         operation: 'cleanupPersonaMemories',
@@ -948,15 +665,9 @@ class PersonaMemoryManager {
       });
     }
   }
-
-  /**
-   * Format persona response
-   */
   formatPersonaResponse(persona) {
-    // Safely handle timestamps - ensure they are valid numbers
     const createdAt = this.safeTimestamp(persona.created_at);
     const updatedAt = this.safeTimestamp(persona.updated_at);
-
     return {
       id: persona.id,
       userId: persona.user_id,
@@ -971,17 +682,10 @@ class PersonaMemoryManager {
       isActive: Boolean(persona.is_active)
     };
   }
-
-  /**
-   * Safely handle timestamp values to prevent Invalid Date errors
-   */
   safeTimestamp(timestamp) {
-    // Handle null, undefined, or empty values
     if (!timestamp && timestamp !== 0) {
       return Date.now();
     }
-    
-    // Convert string timestamps to numbers
     let numericTimestamp;
     if (typeof timestamp === 'string') {
       numericTimestamp = parseInt(timestamp, 10);
@@ -993,13 +697,9 @@ class PersonaMemoryManager {
     } else {
       return Date.now();
     }
-    
-    // Check if it's a valid timestamp range
     if (numericTimestamp < 0 || numericTimestamp > Date.now() + (365 * 24 * 60 * 60 * 1000)) {
       return Date.now();
     }
-    
-    // Test that it creates a valid Date object
     try {
       const date = new Date(numericTimestamp);
       if (isNaN(date.getTime())) {
@@ -1011,5 +711,4 @@ class PersonaMemoryManager {
     }
   }
 }
-
 module.exports = PersonaMemoryManager;
