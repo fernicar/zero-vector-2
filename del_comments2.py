@@ -64,19 +64,22 @@ if __name__ == "__main__":
 
                 if process_result.returncode == 0:
                     print(f"  Successfully processed {file_path} with Terser.")
-                    if process_result.stderr:
-                        print(f"  Terser warnings for {file_path}:\n{process_result.stderr}")
+                    if process_result.stderr: # Terser might output warnings to stderr even on success
+                        print(f"  Terser warnings for {absolute_filepath}:\n{process_result.stderr.strip()}")
                 else:
-                    if file_path.endswith(".jsx"):
-                        print(f"  Info: Skipped processing '{file_path}'. Standard 'terser' does not support JSX syntax directly. Transpilation (e.g., with Babel) is typically needed first.")
-                        # Optionally, still print Terser's specific error for more details if desired
-                        # print(f"  Terser stderr for {file_path} (JSX):\n{process_result.stderr}")
+                    print(f"  Error: 'terser' failed to process {file_path} (absolute: {absolute_filepath}).")
+                    print(f"  Terser exit code: {process_result.returncode}")
+                    if process_result.stdout and process_result.stdout.strip():
+                        print(f"  Terser stdout:\n{process_result.stdout.strip()}")
+                    if process_result.stderr and process_result.stderr.strip():
+                        print(f"  Terser stderr:\n{process_result.stderr.strip()}")
                     else:
-                        print(f"  Error processing {file_path} with Terser.")
-                        print(f"  Terser stderr:\n{process_result.stderr}")
-                        print(f"  Terser stdout:\n{process_result.stdout}")
+                        print("  Terser stderr: <no specific error message captured or stderr is empty>")
+
+                    if file_path.endswith(".jsx"):
+                        print(f"  Info: Standard 'terser' does not support JSX syntax directly. Transpilation (e.g., with Babel) is typically needed first for JSX files.")
 
             except FileNotFoundError:
-                print(f"  Error: File not found: {file_path} (Skipped)")
-            except Exception as e:
+                print(f"  Error: File not found during processing: {file_path} (Skipped)")
+            except Exception as e: # Catch other potential errors like IOError during file ops if they occurred before/after subprocess
                 print(f"  An unexpected error occurred while processing {file_path}: {e} (Skipped)")
