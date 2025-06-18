@@ -48,9 +48,10 @@ if __name__ == "__main__":
 
         print("\nProcessing files using Terser...")
         for file_path in found_files:
-            print(f"Processing {file_path}...")
+            absolute_filepath = os.path.abspath(file_path)
+            print(f"Processing {file_path} (absolute: {absolute_filepath})...")
             try:
-                terser_command = ["terser", file_path, "-o", file_path, "--comments", "false"]
+                terser_command = ["terser", absolute_filepath, "-o", absolute_filepath, "--comments", "false"]
                 if args.delverbose:
                     terser_command.extend(["--compress", "drop_console=true"])
 
