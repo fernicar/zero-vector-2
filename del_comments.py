@@ -28,11 +28,38 @@ def remove_logging_statements(text: str) -> str:
     return re.sub(pattern, "", text, flags=re.MULTILINE)
 
 def remove_comments_and_docstrings(text: str) -> str:
-    """Removes comments and docstrings."""
+    """Removes comments and docstrings, attempting to preserve assigned multi-line strings."""
     processed_text = re.sub(r"#.*", "", text) # Remove single-line comments
-    # Remove multi-line comments (docstrings)
+
+    # Protect-remove-restore strategy for multi-line strings
+    assigned_multiline_placeholder_template = "__ASSIGNED_MULTILINE_STRING_PLACEHOLDER_{index}__"
+    assigned_strings = []
+
+    def _replace_assigned_multiline_with_placeholder(match_obj):
+        # group(1) is the part before and including '=' (e.g., "varname = ")
+        # group(2) is the triple-quoted string itself
+        variable_assignment_part = match_obj.group(1)
+        actual_string_content = match_obj.group(2)
+
+        assigned_strings.append(actual_string_content)
+        placeholder = assigned_multiline_placeholder_template.format(index=len(assigned_strings) - 1)
+        return f"{variable_assignment_part}{placeholder}"
+
+    # Regex to find assigned multi-line strings:
+    # Looks for: optional_indentation + var_name + optional_spaces + = + optional_spaces + triple_quoted_string
+    # Catches `VAR = """..."""` or `VAR = '''...'''`
+    # This is a heuristic and might not catch all complex assignments but covers common cases.
+    assignment_pattern = r"^(\s*[a-zA-Z_][\w\.]*\s*=\s*)(\"\"\"[\s\S]*?\"\"\"|'''[\s\S]*?''')"
+    processed_text = re.sub(assignment_pattern, _replace_assigned_multiline_with_placeholder, processed_text, flags=re.MULTILINE)
+
+    # Now, remove all *other* triple-quoted strings (these are actual docstrings or unassigned block comments)
     processed_text = re.sub(r"\"\"\"[\s\S]*?\"\"\"", "", processed_text, flags=re.MULTILINE)
     processed_text = re.sub(r"'''[\s\S]*?'''", "", processed_text, flags=re.MULTILINE)
+
+    # Restore the assigned multi-line strings
+    for i, original_string in enumerate(assigned_strings):
+        placeholder_to_find = assigned_multiline_placeholder_template.format(index=i)
+        processed_text = processed_text.replace(placeholder_to_find, original_string)
 
     lines = [line.rstrip() for line in processed_text.splitlines() if line.strip()]
     return "\n".join(lines)
@@ -75,33 +102,39 @@ if __name__ == "__main__":
 
         print("\nProcessing files...")
         for py_file_path in found_files:
-            print(f"\n--- Content of {py_file_path} ---")
+            print(f"Processing {py_file_path}...") # Status message
             try:
                 with open(py_file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
 
+                original_content_for_comparison = content # Store original for comparison
                 modified_content = content
 
-                # Step 1: Comments and Docstrings are always removed.
-                print(f"  Applying comment and docstring removal...") # This print was present
+                # Apply transformations
                 modified_content = remove_comments_and_docstrings(modified_content)
 
                 if args.delverbose:
-                    print(f"  --delverbose active: Removing print statements...") # This print was present
                     modified_content = remove_print_statements(modified_content)
 
                 if args.delmessage:
-                    print(f"  --delmessage active: Removing logging statements...") # This print was present
                     modified_content = remove_logging_statements(modified_content)
 
                 final_lines = [line for line in modified_content.splitlines() if line.strip()]
                 modified_content = "\n".join(final_lines)
-                if modified_content:
+                if final_lines: # Add a newline only if there's actual content
                     modified_content += "\n"
 
-                print(modified_content) # This was the main print to stdout
+                # Overwrite the file only if content has changed
+                if modified_content != original_content_for_comparison:
+                    with open(py_file_path, 'w', encoding='utf-8') as f:
+                        f.write(modified_content)
+                    print(f"  Successfully modified and saved {py_file_path}")
+                else:
+                    print(f"  No changes needed for {py_file_path}")
 
             except FileNotFoundError:
-                print(f"Error: File not found: {py_file_path}")
+                print(f"  Error: File not found: {py_file_path} (Skipped)")
+            except IOError as e:
+                print(f"  Error writing to file {py_file_path}: {e} (Skipped)")
             except Exception as e:
-                print(f"Error processing file {py_file_path}: {e}")
+                print(f"  An unexpected error occurred while processing {py_file_path}: {e} (Skipped)")
