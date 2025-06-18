@@ -1,6 +1,45 @@
 import argparse
 import os
 import subprocess # Added for running Terser
+import sys # Added for sys.exit()
+
+def check_terser_availability() -> bool:
+    """
+    Checks if 'terser' is installed and accessible.
+    Prints instructions if not found.
+    Returns True if available, False otherwise.
+    """
+    try:
+        result = subprocess.run(
+            ['terser', '--version'],
+            capture_output=True,
+            text=True,
+            check=False, # We handle the check manually
+            shell=False  # Explicitly False for security
+        )
+        if result.returncode == 0:
+            print(f"Terser found: {result.stdout.strip()}")
+            return True
+        else:
+            print(f"Error: 'terser --version' exited with code {result.returncode}.")
+            if result.stderr:
+                print(f"Terser stderr:\n{result.stderr.strip()}")
+            # Instructions are printed below for FileNotFoundError, could also print here if needed
+            return False
+    except FileNotFoundError:
+        print("\nError: 'terser' command not found.")
+        print("'del_comments2.py' requires Node.js and 'terser' to process JavaScript files.\n")
+        print("Please ensure Node.js and npm are installed, then install 'terser' globally by running:")
+        print("  npm install terser -g\n")
+        print("If 'terser' is already installed globally but still not found, you may need to:")
+        print("1. Find your npm global install directory by running: npm prefix -g")
+        print("2. Add this directory to your system's PATH environment variable.")
+        print("3. Restart your terminal or command prompt session for PATH changes to take effect.\n")
+        print("After ensuring 'terser' is installed and accessible via PATH, please run this script again.")
+        return False
+    except Exception as e: # Catch other potential errors during the check
+        print(f"An unexpected error occurred while checking for 'terser': {e}")
+        return False
 
 def find_js_files(target_directory: str) -> list[str]:
     """
@@ -32,7 +71,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    print("Parsed arguments:")
+    if not check_terser_availability():
+        sys.exit(1)
+
+    print("\nParsed arguments:") # Moved print after terser check
     print(f"  Target Directory: {args.target_directory}")
     print(f"  Remove console.log (--delverbose): {args.delverbose}")
 
