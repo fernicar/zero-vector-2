@@ -1,8 +1,3 @@
-/**
- * Persona Tools for Zero-Vector MCP Server
- * CRUD operations for persona management
- */
-
 import apiClient from '../apiClient.js';
 import { personaSchemas, validateInput } from '../utils/validation.js';
 import { createLogger } from '../utils/logger.js';
@@ -10,9 +5,6 @@ import { formatTimestamp } from '../utils/dateHelpers.js';
 
 const logger = createLogger('PersonaTools');
 
-/**
- * Create a new persona
- */
 export const createPersona = {
   name: 'create_persona',
   description: 'Create a new persona with specified configuration',
@@ -69,7 +61,6 @@ export const createPersona = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(personaSchemas.createPersona, params, 'create_persona');
       if (!validation.valid) {
         return {
@@ -83,7 +74,6 @@ export const createPersona = {
 
       const validParams = validation.value;
 
-      // Create persona via API
       const result = await apiClient.post('/api/personas', validParams);
 
       if (!result.success) {
@@ -102,9 +92,9 @@ export const createPersona = {
       }
 
       const personaData = result.data;
-      logger.info('Persona created successfully', { 
+      logger.info('Persona created successfully', {
         personaId: personaData.id,
-        name: personaData.name 
+        name: personaData.name
       });
 
       let resultText = `✅ **Persona "${personaData.name}" created successfully!**\n\n`;
@@ -137,9 +127,6 @@ export const createPersona = {
   }
 };
 
-/**
- * List all personas
- */
 export const listPersonas = {
   name: 'list_personas',
   description: 'List all personas with optional filtering and statistics',
@@ -170,7 +157,6 @@ export const listPersonas = {
 
   async handler(params = {}) {
     try {
-      // Validate input
       const validation = validateInput(personaSchemas.listPersonas, params, 'list_personas');
       if (!validation.valid) {
         return {
@@ -184,7 +170,6 @@ export const listPersonas = {
 
       const validParams = validation.value;
 
-      // Get personas via API
       const result = await apiClient.get('/api/personas', validParams);
 
       if (!result.success) {
@@ -203,7 +188,7 @@ export const listPersonas = {
       }
 
       const { personas, total } = result.data;
-      logger.info('Personas listed successfully', { 
+      logger.info('Personas listed successfully', {
         count: personas.length,
         total
       });
@@ -227,16 +212,16 @@ export const listPersonas = {
         }
         resultText += `• Status: ${persona.isActive ? '🟢 Active' : '🔴 Inactive'}\n`;
         resultText += `• Created: ${formatTimestamp(persona.createdAt, 'date')}\n`;
-        
+
         if (validParams.include_stats && persona.stats) {
           const stats = persona.stats;
           resultText += `• Memories: ${stats.totalMemories || 0} (${stats.conversationCount || 0} conversations)\n`;
-          
+
           if (stats.memoryTypes && Object.keys(stats.memoryTypes).length > 0) {
             resultText += `• Types: ${Object.entries(stats.memoryTypes).map(([type, count]) => `${type}: ${count}`).join(', ')}\n`;
           }
         }
-        
+
         resultText += '\n';
       });
 
@@ -265,9 +250,6 @@ export const listPersonas = {
   }
 };
 
-/**
- * Get persona details
- */
 export const getPersona = {
   name: 'get_persona',
   description: 'Get detailed information about a specific persona',
@@ -294,7 +276,6 @@ export const getPersona = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(personaSchemas.getPersona, params, 'get_persona');
       if (!validation.valid) {
         return {
@@ -308,7 +289,6 @@ export const getPersona = {
 
       const validParams = validation.value;
 
-      // Get persona via API
       const result = await apiClient.get(`/api/personas/${validParams.id}`, {
         include_memories: validParams.include_memories,
         memory_limit: validParams.memory_limit
@@ -331,9 +311,9 @@ export const getPersona = {
       }
 
       const persona = result.data;
-      logger.info('Persona retrieved successfully', { 
+      logger.info('Persona retrieved successfully', {
         personaId: persona.id,
-        name: persona.name 
+        name: persona.name
       });
 
       let resultText = `👤 **Persona: ${persona.name}**\n\n`;
@@ -364,11 +344,11 @@ export const getPersona = {
         resultText += `\n📈 **Statistics:**\n`;
         resultText += `• Total Memories: ${stats.totalMemories || 0}\n`;
         resultText += `• Conversations: ${stats.conversationCount || 0}\n`;
-        
+
         if (stats.memoryTypes && Object.keys(stats.memoryTypes).length > 0) {
           resultText += `• Memory Types: ${Object.entries(stats.memoryTypes).map(([type, count]) => `${type}: ${count}`).join(', ')}\n`;
         }
-        
+
         if (stats.lastActivity) {
           resultText += `• Last Activity: ${formatTimestamp(stats.lastActivity, 'iso')}\n`;
         }
@@ -402,9 +382,6 @@ export const getPersona = {
   }
 };
 
-/**
- * Update persona
- */
 export const updatePersona = {
   name: 'update_persona',
   description: 'Update persona configuration and settings',
@@ -460,7 +437,6 @@ export const updatePersona = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(personaSchemas.updatePersona, params, 'update_persona');
       if (!validation.valid) {
         return {
@@ -475,7 +451,6 @@ export const updatePersona = {
       const validParams = validation.value;
       const { id, ...updateData } = validParams;
 
-      // Update persona via API
       const result = await apiClient.put(`/api/personas/${id}`, updateData);
 
       if (!result.success) {
@@ -495,9 +470,9 @@ export const updatePersona = {
       }
 
       const persona = result.data;
-      logger.info('Persona updated successfully', { 
+      logger.info('Persona updated successfully', {
         personaId: persona.id,
-        name: persona.name 
+        name: persona.name
       });
 
       let resultText = `✅ **Persona "${persona.name}" updated successfully!**\n\n`;
@@ -532,9 +507,6 @@ export const updatePersona = {
   }
 };
 
-/**
- * Delete persona
- */
 export const deletePersona = {
   name: 'delete_persona',
   description: 'Delete a persona and all its associated memories',
@@ -551,7 +523,6 @@ export const deletePersona = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(personaSchemas.deletePersona, params, 'delete_persona');
       if (!validation.valid) {
         return {
@@ -565,7 +536,6 @@ export const deletePersona = {
 
       const { id } = validation.value;
 
-      // Delete persona via API
       const result = await apiClient.delete(`/api/personas/${id}`);
 
       if (!result.success) {
@@ -611,7 +581,6 @@ export const deletePersona = {
   }
 };
 
-// Export all persona tools
 export const personaTools = [
   createPersona,
   listPersonas,

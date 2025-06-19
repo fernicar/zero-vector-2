@@ -5,19 +5,9 @@ const { logger } = require('../utils/logger');
 
 const router = express.Router();
 
-/**
- * Vector Operations Routes
- * Handles all vector CRUD operations and similarity search
- */
-
-/**
- * Insert a single vector
- * POST /api/vectors
- */
 router.post('/', asyncHandler(async (req, res) => {
   const { id, vector, metadata = {} } = req.body;
 
-  // Validate required fields
   if (!vector || !Array.isArray(vector)) {
     throw new ValidationError('Vector array is required');
   }
@@ -26,10 +16,8 @@ router.post('/', asyncHandler(async (req, res) => {
     throw new ValidationError('Vector cannot be empty');
   }
 
-  // Generate ID if not provided
   const vectorId = id || uuidv4();
 
-  // Validate vector dimensions
   const expectedDimensions = req.vectorStore.dimensions;
   if (vector.length !== expectedDimensions) {
     throw new ValidationError(
@@ -37,7 +25,6 @@ router.post('/', asyncHandler(async (req, res) => {
     );
   }
 
-  // Validate vector values
   for (let i = 0; i < vector.length; i++) {
     if (typeof vector[i] !== 'number' || !isFinite(vector[i])) {
       throw new ValidationError(`Invalid vector value at index ${i}: ${vector[i]}`);
@@ -45,10 +32,8 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 
   try {
-    // Add vector to store
     const result = await req.vectorStore.addVector(vector, vectorId, metadata);
 
-    // Store metadata in database
     await req.database.insertVectorMetadata({
       id: vectorId,
       dimensions: vector.length,
@@ -88,16 +73,12 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Get a vector by ID
- * GET /api/vectors/:id
- */
 router.get('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { include_metadata = false, include_values = false } = req.query;
 
   const vector = req.vectorStore.getVector(id, include_metadata);
-  
+
   if (!vector) {
     return res.status(404).json({
       status: 'error',
@@ -132,10 +113,6 @@ router.get('/:id', asyncHandler(async (req, res) => {
   res.json(response);
 }));
 
-/**
- * Update a vector
- * PUT /api/vectors/:id
- */
 router.put('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { vector, metadata = {} } = req.body;
@@ -144,7 +121,6 @@ router.put('/:id', asyncHandler(async (req, res) => {
     throw new ValidationError('Vector array is required');
   }
 
-  // Validate vector dimensions
   const expectedDimensions = req.vectorStore.dimensions;
   if (vector.length !== expectedDimensions) {
     throw new ValidationError(
@@ -154,7 +130,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
   try {
     const success = req.vectorStore.updateVector(id, vector, metadata);
-    
+
     if (!success) {
       return res.status(404).json({
         status: 'error',
@@ -163,7 +139,6 @@ router.put('/:id', asyncHandler(async (req, res) => {
       });
     }
 
-    // Update metadata in database
     await req.database.updateVectorMetadata(id, {
       personaId: metadata.personaId,
       contentType: metadata.contentType,
@@ -189,15 +164,11 @@ router.put('/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Delete a vector
- * DELETE /api/vectors/:id
- */
 router.delete('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const success = req.vectorStore.deleteVector(id);
-  
+
   if (!success) {
     return res.status(404).json({
       status: 'error',
@@ -206,7 +177,6 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     });
   }
 
-  // Delete metadata from database
   try {
     await req.database.deleteVectorMetadata(id);
   } catch (error) {
@@ -222,10 +192,6 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   });
 }));
 
-/**
- * Similarity search
- * POST /api/vectors/search
- */
 router.post('/search', asyncHandler(async (req, res) => {
   const {
     query,
@@ -241,7 +207,6 @@ router.post('/search', asyncHandler(async (req, res) => {
     throw new ValidationError('Query vector array is required');
   }
 
-  // Validate query dimensions
   const expectedDimensions = req.vectorStore.dimensions;
   if (query.length !== expectedDimensions) {
     throw new ValidationError(
@@ -249,7 +214,6 @@ router.post('/search', asyncHandler(async (req, res) => {
     );
   }
 
-  // Validate parameters
   if (typeof limit !== 'number' || limit < 1 || limit > 1000) {
     throw new ValidationError('Limit must be a number between 1 and 1000');
   }
@@ -265,7 +229,6 @@ router.post('/search', asyncHandler(async (req, res) => {
   try {
     const startTime = Date.now();
 
-    // Perform similarity search
     const results = req.vectorStore.search(query, {
       limit: parseInt(limit),
       threshold: parseFloat(threshold),
@@ -274,7 +237,6 @@ router.post('/search', asyncHandler(async (req, res) => {
       includeValues: include_values === true || include_values === 'true'
     });
 
-    // Enrich results with database metadata if requested
     if (include_metadata === true || include_metadata === 'true') {
       for (const result of results) {
         try {
@@ -324,10 +286,6 @@ router.post('/search', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Batch insert vectors
- * POST /api/vectors/batch
- */
 router.post('/batch', asyncHandler(async (req, res) => {
   const { vectors } = req.body;
 
@@ -343,13 +301,12 @@ router.post('/batch', asyncHandler(async (req, res) => {
     throw new ValidationError('Maximum 1000 vectors allowed per batch');
   }
 
-  // Validate each vector
   const expectedDimensions = req.vectorStore.dimensions;
   const vectorsToInsert = [];
 
   for (let i = 0; i < vectors.length; i++) {
     const vectorData = vectors[i];
-    
+
     if (!vectorData.vector || !Array.isArray(vectorData.vector)) {
       throw new ValidationError(`Vector at index ${i} must have a vector array`);
     }
@@ -370,10 +327,8 @@ router.post('/batch', asyncHandler(async (req, res) => {
   try {
     const startTime = Date.now();
 
-    // Perform batch insert
     const result = await req.vectorStore.batchInsert(vectorsToInsert);
 
-    // Insert successful metadata into database
     const metadataPromises = result.successful.map(async (successResult) => {
       const vectorData = vectorsToInsert.find(v => v.id === successResult.id);
       if (vectorData) {
@@ -425,13 +380,9 @@ router.post('/batch', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Get vector store statistics
- * GET /api/vectors/stats
- */
 router.get('/_stats', asyncHandler(async (req, res) => {
   const stats = req.vectorStore.getStats();
-  
+
   res.json({
     status: 'success',
     data: stats,
@@ -439,10 +390,6 @@ router.get('/_stats', asyncHandler(async (req, res) => {
   });
 }));
 
-/**
- * List vector IDs with optional filtering
- * GET /api/vectors
- */
 router.get('/', asyncHandler(async (req, res) => {
   const {
     limit = 100,
@@ -454,7 +401,6 @@ router.get('/', asyncHandler(async (req, res) => {
     created_before
   } = req.query;
 
-  // Build filters
   const filters = {};
   if (persona_id) filters.personaId = persona_id;
   if (content_type) filters.contentType = content_type;
@@ -463,7 +409,6 @@ router.get('/', asyncHandler(async (req, res) => {
   if (created_before) filters.createdBefore = parseInt(created_before);
 
   try {
-    // Get vector metadata from database
     const vectors = await req.database.searchVectorMetadata(
       filters,
       parseInt(limit),

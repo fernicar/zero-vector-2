@@ -5,12 +5,11 @@ const config = require('../config');
 let RedisStore;
 let redisClient;
 
-// Initialize Redis if enabled
 if (config.redis.enabled) {
   try {
     const redis = require('redis');
     RedisStore = require('rate-limit-redis');
-    
+
     redisClient = redis.createClient({
       host: config.redis.host,
       port: config.redis.port,
@@ -33,9 +32,6 @@ if (config.redis.enabled) {
   }
 }
 
-/**
- * Create rate limiter with Redis store if available
- */
 const createRateLimiter = (options = {}) => {
   const defaultOptions = {
     windowMs: config.security.rateLimitWindowMs,
@@ -54,7 +50,6 @@ const createRateLimiter = (options = {}) => {
 
   const limiterOptions = { ...defaultOptions, ...options };
 
-  // Use Redis store if available
   if (redisClient && RedisStore) {
     limiterOptions.store = new RedisStore({
       client: redisClient,
@@ -65,11 +60,8 @@ const createRateLimiter = (options = {}) => {
   return rateLimit(limiterOptions);
 };
 
-/**
- * Global rate limiter for all requests
- */
 const globalRateLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 1000,
   prefix: 'global_rl:',
   message: {
@@ -81,11 +73,8 @@ const globalRateLimiter = createRateLimiter({
   }
 });
 
-/**
- * API key specific rate limiter
- */
 const apiKeyRateLimiter = createRateLimiter({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
   max: (req) => req.apiKey?.rateLimit || 100,
   keyGenerator: (req) => req.apiKey?.id || req.ip,
   prefix: 'api_key_rl:',
@@ -98,11 +87,8 @@ const apiKeyRateLimiter = createRateLimiter({
   }
 });
 
-/**
- * Search operation rate limiter (more restrictive)
- */
 const searchRateLimiter = createRateLimiter({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
   max: 20,
   prefix: 'search_rl:',
   message: {
@@ -114,11 +100,8 @@ const searchRateLimiter = createRateLimiter({
   }
 });
 
-/**
- * Write operation rate limiter
- */
 const writeRateLimiter = createRateLimiter({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
   max: 50,
   prefix: 'write_rl:',
   message: {
@@ -130,16 +113,12 @@ const writeRateLimiter = createRateLimiter({
   }
 });
 
-/**
- * Authentication rate limiter (for login attempts)
- */
 const authRateLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 5,
   prefix: 'auth_rl:',
   skipSuccessfulRequests: true,
   keyGenerator: (req) => {
-    // Use email if provided, otherwise IP
     return req.body?.email || req.ip;
   },
   message: {
@@ -151,28 +130,22 @@ const authRateLimiter = createRateLimiter({
   }
 });
 
-/**
- * Dynamic rate limiter based on user role
- */
 const dynamicRateLimiter = (baseMax = 100) => {
   return createRateLimiter({
     windowMs: 60 * 1000,
     max: (req) => {
       if (req.user?.role === 'admin') {
-        return baseMax * 5; // Admins get 5x the limit
+        return baseMax * 5;
       } else if (req.user?.role === 'user') {
-        return baseMax * 2; // Regular users get 2x
+        return baseMax * 2;
       }
-      return baseMax; // Default limit
+      return baseMax;
     },
     keyGenerator: (req) => req.user?.id || req.ip,
     prefix: 'dynamic_rl:'
   });
 };
 
-/**
- * Rate limiter with custom error handling
- */
 const rateLimiterWithLogging = (limiter, operationType = 'general') => {
   return (req, res, next) => {
     limiter(req, res, (error) => {
@@ -192,9 +165,6 @@ const rateLimiterWithLogging = (limiter, operationType = 'general') => {
   };
 };
 
-/**
- * Check rate limit status without consuming quota
- */
 const checkRateLimit = (keyPrefix, windowMs, max) => {
   return async (req, res, next) => {
     if (!redisClient) {
@@ -205,7 +175,7 @@ const checkRateLimit = (keyPrefix, windowMs, max) => {
       const key = `${keyPrefix}:${req.ip}`;
       const current = await redisClient.get(key);
       const remaining = Math.max(0, max - (parseInt(current) || 0));
-      
+
       res.setHeader('X-RateLimit-Limit', max);
       res.setHeader('X-RateLimit-Remaining', remaining);
       res.setHeader('X-RateLimit-Reset', Date.now() + windowMs);

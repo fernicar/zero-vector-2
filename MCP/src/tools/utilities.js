@@ -1,8 +1,3 @@
-/**
- * Utility Tools for Zero-Vector MCP Server
- * System health, statistics, and connectivity tools
- */
-
 import apiClient from '../apiClient.js';
 import { utilitySchemas, validateInput } from '../utils/validation.js';
 import { createLogger } from '../utils/logger.js';
@@ -10,9 +5,6 @@ import { formatTimestamp } from '../utils/dateHelpers.js';
 
 const logger = createLogger('UtilityTools');
 
-/**
- * Get system health information
- */
 export const getSystemHealth = {
   name: 'get_system_health',
   description: 'Check Zero-Vector server health and connectivity status',
@@ -28,7 +20,6 @@ export const getSystemHealth = {
 
   async handler(params = {}) {
     try {
-      // Validate input
       const validation = validateInput(utilitySchemas.getSystemHealth, params, 'get_system_health');
       if (!validation.valid) {
         return {
@@ -42,7 +33,6 @@ export const getSystemHealth = {
 
       const { detailed } = validation.value;
 
-      // Get health information via API
       const endpoint = detailed ? '/health/detailed' : '/health';
       const result = await apiClient.get(endpoint);
 
@@ -67,7 +57,7 @@ export const getSystemHealth = {
       let resultText = `🏥 **Zero-Vector Server Health**\n\n`;
       resultText += `📊 **Status:** ${(healthData.status === 'healthy' || healthData.status === 'ok') ? '🟢 Healthy' : '🔴 Unhealthy'}\n`;
       resultText += `⏰ **Timestamp:** ${formatTimestamp(healthData.timestamp, 'iso')}\n`;
-      
+
       if (healthData.uptime) {
         const uptimeHours = Math.floor(healthData.uptime / 3600);
         const uptimeMinutes = Math.floor((healthData.uptime % 3600) / 60);
@@ -138,9 +128,6 @@ export const getSystemHealth = {
   }
 };
 
-/**
- * Get persona statistics
- */
 export const getPersonaStats = {
   name: 'get_persona_stats',
   description: 'Get statistics about personas and their memory usage',
@@ -160,7 +147,6 @@ export const getPersonaStats = {
 
   async handler(params = {}) {
     try {
-      // Validate input
       const validation = validateInput(utilitySchemas.getPersonaStats, params, 'get_persona_stats');
       if (!validation.valid) {
         return {
@@ -174,13 +160,12 @@ export const getPersonaStats = {
 
       const validParams = validation.value;
 
-      // Get persona statistics via API
-      const endpoint = validParams.personaId 
+      const endpoint = validParams.personaId
         ? `/api/personas/${validParams.personaId}/stats`
         : '/api/personas/_stats';
-      
-      const result = await apiClient.get(endpoint, { 
-        include_memory_breakdown: validParams.include_memory_breakdown 
+
+      const result = await apiClient.get(endpoint, {
+        include_memory_breakdown: validParams.include_memory_breakdown
       });
 
       if (!result.success) {
@@ -199,60 +184,58 @@ export const getPersonaStats = {
       }
 
       const stats = result.data;
-      logger.info('Persona stats retrieved successfully', { 
-        personaId: validParams.personaId || 'all' 
+      logger.info('Persona stats retrieved successfully', {
+        personaId: validParams.personaId || 'all'
       });
 
-      let resultText = validParams.personaId 
+      let resultText = validParams.personaId
         ? `👤 **Persona Statistics: ${validParams.personaId}**\n\n`
         : `👥 **All Personas Statistics**\n\n`;
 
       if (validParams.personaId) {
-        // Single persona stats
         resultText += `📊 **Memory Overview:**\n`;
         resultText += `• Total Memories: ${stats.totalMemories}\n`;
         resultText += `• Conversations: ${stats.conversationCount}\n`;
         resultText += `• Active Conversations: ${stats.activeConversations || 0}\n`;
         resultText += `• Last Activity: ${stats.lastActivity ? formatTimestamp(stats.lastActivity, 'iso') : 'Never'}\n`;
-        
+
         if (stats.memoryTypeBreakdown && validParams.include_memory_breakdown) {
           resultText += `\n🏷️ **Memory Types:**\n`;
           Object.entries(stats.memoryTypeBreakdown).forEach(([type, count]) => {
             resultText += `• ${type}: ${count}\n`;
           });
         }
-        
+
         if (stats.averageImportance !== undefined) {
           resultText += `\n⭐ **Quality:**\n`;
           resultText += `• Average Importance: ${stats.averageImportance.toFixed(3)}\n`;
         }
-        
+
         if (stats.memoryUsage) {
           resultText += `• Memory Usage: ${stats.memoryUsage.toFixed(1)}% of limit\n`;
         }
-        
+
       } else {
-        // All personas stats
         resultText += `📊 **Overview:**\n`;
         resultText += `• Total Personas: ${stats.totalPersonas}\n`;
         resultText += `• Active Personas: ${stats.activePersonas}\n`;
         resultText += `• Total Memories: ${stats.totalMemories || 0}\n`;
         resultText += `• Total Conversations: ${stats.totalConversations}\n`;
-        
+
         if (stats.topPersonas) {
           resultText += `\n🏆 **Most Active Personas:**\n`;
           stats.topPersonas.slice(0, 5).forEach((persona, index) => {
             resultText += `${index + 1}. ${persona.name}: ${persona.memoryCount} memories\n`;
           });
         }
-        
+
         if (stats.memoryDistribution && validParams.include_memory_breakdown) {
           resultText += `\n🏷️ **Memory Distribution:**\n`;
           Object.entries(stats.memoryDistribution).forEach(([type, count]) => {
             resultText += `• ${type}: ${count || 0}\n`;
           });
         }
-        
+
         if (stats.recentActivity) {
           resultText += `\n📈 **Recent Activity (24h):**\n`;
           resultText += `• New Memories: ${stats.recentActivity.newMemories}\n`;
@@ -283,9 +266,6 @@ export const getPersonaStats = {
   }
 };
 
-/**
- * Test connection to Zero-Vector server
- */
 export const testConnection = {
   name: 'test_connection',
   description: 'Test connectivity and authentication with the Zero-Vector server',
@@ -298,7 +278,6 @@ export const testConnection = {
     try {
       logger.info('Testing Zero-Vector connection');
 
-      // Test basic connectivity
       const connectionTest = await apiClient.testConnection();
 
       if (!connectionTest.connected) {
@@ -311,13 +290,12 @@ export const testConnection = {
         };
       }
 
-      // Test API key authentication by trying to access a protected endpoint
       const authTest = await apiClient.get('/api/personas');
 
       let resultText = `✅ **Connection Successful**\n\n`;
       resultText += `🌐 **Server URL:** ${apiClient.baseURL}\n`;
       resultText += `🏥 **Health:** ${connectionTest.health?.status || 'Unknown'}\n`;
-      
+
       if (authTest.success) {
         resultText += `🔑 **Authentication:** ✅ Valid API Key\n`;
         resultText += `🔓 **API Access:** ✅ Permissions verified\n`;
@@ -360,7 +338,6 @@ export const testConnection = {
   }
 };
 
-// Export all utility tools
 export const utilityTools = [
   getSystemHealth,
   getPersonaStats,

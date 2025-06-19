@@ -1,23 +1,19 @@
 const dotenv = require('dotenv');
 const path = require('path');
 
-// Load environment variables
 dotenv.config();
 
 const config = {
-  // Server Configuration
   server: {
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT, 10) || 3000,
     host: process.env.HOST || 'localhost'
   },
 
-  // Database Configuration
   database: {
     path: process.env.DB_PATH || './data/vectordb.sqlite'
   },
 
-  // Vector Database Settings
   vectorDb: {
     maxMemoryMB: parseInt(process.env.MAX_MEMORY_MB, 10) || 2048,
     defaultDimensions: parseInt(process.env.DEFAULT_DIMENSIONS, 10) || 1536,
@@ -26,34 +22,29 @@ const config = {
     maxVectors: parseInt(process.env.MAX_VECTORS, 10) || 1000000
   },
 
-  // Security Configuration
   security: {
     jwtSecret: process.env.JWT_SECRET || 'fallback-secret-change-in-production',
     apiKeySaltRounds: parseInt(process.env.API_KEY_SALT_ROUNDS, 10) || 12,
-    rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000, // 15 minutes
+    rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000,
     rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 1000
   },
 
-  // Embedding Services
   embeddings: {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     provider: process.env.EMBEDDING_PROVIDER || 'openai',
     model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small'
   },
 
-  // Monitoring
   monitoring: {
     logLevel: process.env.LOG_LEVEL || 'info',
     metricsEnabled: process.env.METRICS_ENABLED === 'true'
   },
 
-  // WebSocket Configuration
   websocket: {
     enabled: process.env.WEBSOCKET_ENABLED === 'true',
     port: parseInt(process.env.WEBSOCKET_PORT, 10) || 4000
   },
 
-  // Redis Configuration (for rate limiting and sessions)
   redis: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT, 10) || 6379,
@@ -62,7 +53,6 @@ const config = {
     enabled: process.env.REDIS_ENABLED === 'true'
   },
 
-  // Authentication Configuration
   auth: {
     accessTokenExpiry: process.env.ACCESS_TOKEN_EXPIRY || '15m',
     refreshTokenExpiry: process.env.REFRESH_TOKEN_EXPIRY || '7d',
@@ -71,21 +61,17 @@ const config = {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS, 10) || 12
   },
 
-  // Hybrid Vector-Graph Configuration (Zero Vector 2.0)
   hybrid: {
-    // Main feature toggle
     graphEnabled: process.env.GRAPH_ENABLED !== 'false',
-    
-    // Entity extraction settings
+
     entityExtraction: {
       enabled: process.env.ENTITY_EXTRACTION_ENABLED !== 'false',
-      provider: process.env.ENTITY_PROVIDER || 'pattern', // 'pattern' or 'nlp' (future)
+      provider: process.env.ENTITY_PROVIDER || 'pattern',
       confidenceThreshold: parseFloat(process.env.ENTITY_CONFIDENCE_THRESHOLD) || 0.7,
       maxEntitiesPerMemory: parseInt(process.env.MAX_ENTITIES_PER_MEMORY, 10) || 10,
       batchSize: parseInt(process.env.ENTITY_BATCH_SIZE, 10) || 100
     },
 
-    // Graph traversal settings
     graphTraversal: {
       defaultDepth: parseInt(process.env.GRAPH_DEFAULT_DEPTH, 10) || 2,
       maxDepth: parseInt(process.env.GRAPH_MAX_DEPTH, 10) || 5,
@@ -93,7 +79,6 @@ const config = {
       relationshipStrengthThreshold: parseFloat(process.env.RELATIONSHIP_STRENGTH_THRESHOLD) || 0.1
     },
 
-    // Hybrid search settings
     hybridSearch: {
       defaultGraphWeight: parseFloat(process.env.DEFAULT_GRAPH_WEIGHT) || 0.3,
       maxGraphWeight: parseFloat(process.env.MAX_GRAPH_WEIGHT) || 0.8,
@@ -102,39 +87,32 @@ const config = {
       graphBoostFactor: parseFloat(process.env.GRAPH_BOOST_FACTOR) || 1.2
     },
 
-    // Performance and limits
     performance: {
       maxGraphProcessingTimeMs: parseInt(process.env.MAX_GRAPH_PROCESSING_TIME_MS, 10) || 5000,
       graphCacheEnabled: process.env.GRAPH_CACHE_ENABLED !== 'false',
-      graphCacheTtlMs: parseInt(process.env.GRAPH_CACHE_TTL_MS, 10) || 300000, // 5 minutes
+      graphCacheTtlMs: parseInt(process.env.GRAPH_CACHE_TTL_MS, 10) || 300000,
       enableGraphMetrics: process.env.ENABLE_GRAPH_METRICS !== 'false'
     }
   },
 
-  // Feature Flags (Zero Vector 2.0)
   features: {
-    // Hybrid search features
     hybridSearch: process.env.FEATURE_HYBRID_SEARCH !== 'false',
     entityExtraction: process.env.FEATURE_ENTITY_EXTRACTION !== 'false',
     graphExpansion: process.env.FEATURE_GRAPH_EXPANSION !== 'false',
-    
-    // Advanced graph features
+
     relationshipInference: process.env.FEATURE_RELATIONSHIP_INFERENCE === 'true',
     crossPersonaSharing: process.env.FEATURE_CROSS_PERSONA_SHARING === 'true',
     temporalRelationships: process.env.FEATURE_TEMPORAL_RELATIONSHIPS === 'true',
-    
-    // Performance features
+
     adaptiveIndexing: process.env.FEATURE_ADAPTIVE_INDEXING === 'true',
     vectorCompression: process.env.FEATURE_VECTOR_COMPRESSION === 'true',
     intelligentCaching: process.env.FEATURE_INTELLIGENT_CACHING === 'true'
   }
 };
 
-// Validation
 const validateConfig = () => {
   const errors = [];
 
-  // Check required values
   if (config.vectorDb.maxMemoryMB < 64) {
     errors.push('MAX_MEMORY_MB must be at least 64MB');
   }
@@ -160,7 +138,6 @@ const validateConfig = () => {
   }
 };
 
-// Validate configuration on load
 validateConfig();
 
 module.exports = config;

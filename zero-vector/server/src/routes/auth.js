@@ -6,13 +6,8 @@ const { authRateLimiter } = require('../middleware/rateLimiting');
 
 const router = express.Router();
 
-/**
- * Authentication Routes
- * Handles user registration, login, logout, and token management
- */
 const createAuthRoutes = (userService, jwtService, apiKeyService) => {
-  
-  // Validation schemas
+
   const registerSchema = joi.object({
     email: joi.string().email().required(),
     password: joi.string().min(8).required(),
@@ -46,13 +41,8 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     expiresInDays: joi.number().integer().min(1).max(365).optional()
   });
 
-  /**
-   * POST /auth/register
-   * Register a new user
-   */
   router.post('/register', authRateLimiter, async (req, res) => {
     try {
-      // Validate input
       const { error, value } = registerSchema.validate(req.body);
       if (error) {
         return res.status(400).json({
@@ -67,10 +57,8 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
 
       const { email, password, role } = value;
 
-      // Register user
       const user = await userService.registerUser({ email, password, role });
 
-      // Generate tokens
       const tokens = await jwtService.generateTokens(user);
 
       logger.info('User registered successfully', {
@@ -118,13 +106,8 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * POST /auth/login
-   * Authenticate user and return tokens
-   */
   router.post('/login', authRateLimiter, async (req, res) => {
     try {
-      // Validate input
       const { error, value } = loginSchema.validate(req.body);
       if (error) {
         return res.status(400).json({
@@ -139,10 +122,8 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
 
       const { email, password } = value;
 
-      // Authenticate user
       const user = await userService.authenticateUser(email, password);
 
-      // Generate tokens
       const tokens = await jwtService.generateTokens(user);
 
       logger.info('User logged in successfully', {
@@ -168,7 +149,7 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
         email: req.body.email
       });
 
-      if (error.message.includes('Invalid credentials') || 
+      if (error.message.includes('Invalid credentials') ||
           error.message.includes('locked') ||
           error.message.includes('deactivated')) {
         return res.status(401).json({
@@ -190,13 +171,8 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * POST /auth/refresh
-   * Refresh access token using refresh token
-   */
   router.post('/refresh', authRateLimiter, async (req, res) => {
     try {
-      // Validate input
       const { error, value } = refreshTokenSchema.validate(req.body);
       if (error) {
         return res.status(400).json({
@@ -211,7 +187,6 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
 
       const { refreshToken } = value;
 
-      // Refresh token
       const tokens = await jwtService.refreshToken(refreshToken);
 
       res.json({
@@ -244,10 +219,6 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * POST /auth/logout
-   * Logout user and revoke refresh token
-   */
   router.post('/logout', authenticateJWT(jwtService), async (req, res) => {
     try {
       const refreshToken = req.body.refreshToken;
@@ -281,10 +252,6 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * POST /auth/logout-all
-   * Logout user from all devices
-   */
   router.post('/logout-all', authenticateJWT(jwtService), async (req, res) => {
     try {
       const revokedCount = await jwtService.revokeAllUserTokens(req.user.id);
@@ -318,10 +285,6 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * GET /auth/me
-   * Get current user information
-   */
   router.get('/me', authenticateJWT(jwtService), async (req, res) => {
     try {
       const user = await userService.getUserById(req.user.id);
@@ -366,13 +329,8 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * POST /auth/change-password
-   * Change user password
-   */
   router.post('/change-password', authenticateJWT(jwtService), async (req, res) => {
     try {
-      // Validate input
       const { error, value } = changePasswordSchema.validate(req.body);
       if (error) {
         return res.status(400).json({
@@ -424,14 +382,6 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * API Key Management Routes
-   */
-
-  /**
-   * GET /auth/api-keys
-   * List user's API keys
-   */
   router.get('/api-keys', authenticateJWT(jwtService), async (req, res) => {
     try {
       const includeInactive = req.query.include_inactive === 'true';
@@ -461,13 +411,8 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * POST /auth/api-keys
-   * Create new API key
-   */
   router.post('/api-keys', authenticateJWT(jwtService), async (req, res) => {
     try {
-      // Validate input
       const { error, value } = createApiKeySchema.validate(req.body);
       if (error) {
         return res.status(400).json({
@@ -510,10 +455,6 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * PUT /auth/api-keys/:keyId
-   * Update API key
-   */
   router.put('/api-keys/:keyId', authenticateJWT(jwtService), async (req, res) => {
     try {
       const { keyId } = req.params;
@@ -558,10 +499,6 @@ const createAuthRoutes = (userService, jwtService, apiKeyService) => {
     }
   });
 
-  /**
-   * DELETE /auth/api-keys/:keyId
-   * Delete API key
-   */
   router.delete('/api-keys/:keyId', authenticateJWT(jwtService), async (req, res) => {
     try {
       const { keyId } = req.params;

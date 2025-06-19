@@ -6,18 +6,12 @@ const LocalTransformersProvider = require('../services/embedding/LocalTransforme
 
 const router = express.Router();
 
-// Initialize embedding service with providers
 const embeddingService = new EmbeddingService();
 
-// Register local transformers provider as default
 const localProvider = new LocalTransformersProvider();
 embeddingService.registerProvider('local', localProvider);
 embeddingService.setDefaultProvider('local');
 
-/**
- * Generate embedding for text
- * POST /api/embeddings/generate
- */
 router.post('/generate', asyncHandler(async (req, res) => {
   const {
     text,
@@ -28,7 +22,6 @@ router.post('/generate', asyncHandler(async (req, res) => {
     useCache = true
   } = req.body;
 
-  // Validate input
   if (!text || typeof text !== 'string') {
     throw new ValidationError('Text is required and must be a string');
   }
@@ -79,10 +72,6 @@ router.post('/generate', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Generate embeddings for multiple texts
- * POST /api/embeddings/batch
- */
 router.post('/batch', asyncHandler(async (req, res) => {
   const {
     texts,
@@ -94,7 +83,6 @@ router.post('/batch', asyncHandler(async (req, res) => {
     batchSize = 10
   } = req.body;
 
-  // Validate input
   if (!texts || !Array.isArray(texts)) {
     throw new ValidationError('Texts must be an array');
   }
@@ -107,7 +95,6 @@ router.post('/batch', asyncHandler(async (req, res) => {
     throw new ValidationError('Maximum 100 texts allowed per batch');
   }
 
-  // Validate each text
   for (let i = 0; i < texts.length; i++) {
     if (typeof texts[i] !== 'string') {
       throw new ValidationError(`Text at index ${i} must be a string`);
@@ -157,10 +144,6 @@ router.post('/batch', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Generate embedding and store as vector
- * POST /api/embeddings/store
- */
 router.post('/store', asyncHandler(async (req, res) => {
   const {
     text,
@@ -172,13 +155,11 @@ router.post('/store', asyncHandler(async (req, res) => {
     normalize = true
   } = req.body;
 
-  // Validate input
   if (!text || typeof text !== 'string') {
     throw new ValidationError('Text is required and must be a string');
   }
 
   try {
-    // Generate embedding
     const embeddingResult = await embeddingService.generateEmbedding(text, {
       provider,
       model,
@@ -187,7 +168,6 @@ router.post('/store', asyncHandler(async (req, res) => {
       useCache: true
     });
 
-    // Store in vector database
     const vectorId = id || require('uuid').v4();
     const storeResult = await req.vectorStore.addVector(
       embeddingResult.vector,
@@ -201,7 +181,6 @@ router.post('/store', asyncHandler(async (req, res) => {
       }
     );
 
-    // Store metadata in database
     await req.database.insertVectorMetadata({
       id: vectorId,
       dimensions: embeddingResult.vector.length,
@@ -246,10 +225,6 @@ router.post('/store', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Semantic search using text query
- * POST /api/embeddings/search
- */
 router.post('/search', asyncHandler(async (req, res) => {
   const {
     query,
@@ -264,20 +239,17 @@ router.post('/search', asyncHandler(async (req, res) => {
     useIndex = true
   } = req.body;
 
-  // Validate input
   if (!query || typeof query !== 'string') {
     throw new ValidationError('Query text is required and must be a string');
   }
 
   try {
-    // Generate query embedding
     const queryEmbedding = await embeddingService.generateEmbedding(query, {
       provider,
       model,
       useCache: true
     });
 
-    // Perform vector search
     const searchResults = await req.vectorStore.search(queryEmbedding.vector, {
       limit: parseInt(limit),
       threshold: parseFloat(threshold),
@@ -287,7 +259,6 @@ router.post('/search', asyncHandler(async (req, res) => {
       useIndex
     });
 
-    // Enrich results with database metadata if requested
     if (include_metadata === true || include_metadata === 'true') {
       for (const result of searchResults) {
         try {
@@ -339,13 +310,9 @@ router.post('/search', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Get available embedding providers
- * GET /api/embeddings/providers
- */
 router.get('/providers', asyncHandler(async (req, res) => {
   const providers = embeddingService.getAvailableProviders();
-  
+
   res.json({
     status: 'success',
     data: {
@@ -355,13 +322,9 @@ router.get('/providers', asyncHandler(async (req, res) => {
   });
 }));
 
-/**
- * Get embedding service statistics
- * GET /api/embeddings/stats
- */
 router.get('/stats', asyncHandler(async (req, res) => {
   const stats = embeddingService.getStats();
-  
+
   res.json({
     status: 'success',
     data: stats,
@@ -369,17 +332,13 @@ router.get('/stats', asyncHandler(async (req, res) => {
   });
 }));
 
-/**
- * Health check for embedding providers
- * GET /api/embeddings/health
- */
 router.get('/health', asyncHandler(async (req, res) => {
   const healthResults = await embeddingService.healthCheck();
-  
+
   const overallHealthy = Object.values(healthResults).every(
     result => result.status === 'healthy'
   );
-  
+
   res.status(overallHealthy ? 200 : 503).json({
     status: overallHealthy ? 'healthy' : 'degraded',
     data: {
@@ -390,36 +349,28 @@ router.get('/health', asyncHandler(async (req, res) => {
   });
 }));
 
-/**
- * Clear embedding cache
- * POST /api/embeddings/cache/clear
- */
 router.post('/cache/clear', asyncHandler(async (req, res) => {
   embeddingService.clearCache();
-  
+
   logger.info('Embedding cache cleared via API');
-  
+
   res.json({
     status: 'success',
     message: 'Embedding cache cleared successfully'
   });
 }));
 
-/**
- * Configure embedding cache
- * POST /api/embeddings/cache/configure
- */
 router.post('/cache/configure', asyncHandler(async (req, res) => {
   const { maxSize } = req.body;
-  
+
   if (!maxSize || typeof maxSize !== 'number' || maxSize < 100 || maxSize > 100000) {
     throw new ValidationError('maxSize must be a number between 100 and 100,000');
   }
-  
+
   embeddingService.configureCache(maxSize);
-  
+
   logger.info('Embedding cache configured via API', { maxSize });
-  
+
   res.json({
     status: 'success',
     message: 'Embedding cache configured successfully',

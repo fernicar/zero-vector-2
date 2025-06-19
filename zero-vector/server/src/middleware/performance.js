@@ -1,21 +1,14 @@
 const { logPerformance, logger } = require('../utils/logger');
 const { performanceStatsService } = require('../services/PerformanceStatsService');
 
-/**
- * Performance Monitoring Middleware
- * Tracks request performance and logs slow operations
- */
 const performanceMiddleware = (req, res, next) => {
-  // Record start time
   req.startTime = Date.now();
 
-  // Track request count
   if (!global.requestCount) {
     global.requestCount = 0;
   }
   global.requestCount++;
 
-  // Override res.json to capture response size
   const originalJson = res.json;
   res.json = function(data) {
     const responseSize = JSON.stringify(data).length;
@@ -23,12 +16,10 @@ const performanceMiddleware = (req, res, next) => {
     return originalJson.call(this, data);
   };
 
-  // Log when response finishes
   res.on('finish', () => {
     const duration = Date.now() - req.startTime;
     const responseSize = parseInt(res.get('X-Response-Size') || '0', 10);
 
-    // Log performance metrics
     const performanceData = {
       method: req.method,
       url: req.url,
@@ -39,19 +30,15 @@ const performanceMiddleware = (req, res, next) => {
       ip: req.ip
     };
 
-    // Log slow requests
     if (duration > 1000) {
       logger.warn('Slow request detected', performanceData);
     }
 
-    // Log performance metric
     logPerformance(`${req.method} ${req.url}`, duration, performanceData);
 
-    // Record request in performance stats service
     performanceStatsService.recordRequest(performanceData);
   });
 
-  // Track memory usage periodically
   if (global.requestCount % 100 === 0) {
     const memUsage = process.memoryUsage();
     logger.info('Memory usage check', {

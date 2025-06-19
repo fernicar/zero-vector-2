@@ -1,16 +1,7 @@
-/**
- * Zero-Vector MCP Server Configuration
- * Simplified configuration with essential settings
- */
-
 import dotenv from 'dotenv';
 
-// Load environment variables from .env file
 dotenv.config();
 
-/**
- * Load configuration from environment variables
- */
 const config = {
   zeroVector: {
     baseUrl: process.env.ZERO_VECTOR_BASE_URL || 'http://localhost:3000',
@@ -28,7 +19,6 @@ const config = {
   }
 };
 
-// Validate required configuration
 if (!config.zeroVector.apiKey) {
   console.error('❌ ZERO_VECTOR_API_KEY environment variable is required');
   console.error('💡 Set it in your .env file or environment variables');

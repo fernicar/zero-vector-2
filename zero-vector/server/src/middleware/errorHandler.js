@@ -1,17 +1,11 @@
 const { logError, logger } = require('../utils/logger');
 const config = require('../config');
 
-/**
- * Global Error Handler Middleware
- * Handles all unhandled errors and provides consistent error responses
- */
 const errorHandler = (err, req, res, next) => {
-  // Default error values
   let status = err.statusCode || err.status || 500;
   let message = err.message || 'Internal Server Error';
   let code = err.code || 'INTERNAL_ERROR';
 
-  // Log the error
   logError(err, {
     method: req.method,
     url: req.url,
@@ -22,7 +16,6 @@ const errorHandler = (err, req, res, next) => {
     query: req.query
   });
 
-  // Handle specific error types
   if (err.name === 'ValidationError') {
     status = 400;
     message = 'Validation Error';
@@ -61,7 +54,6 @@ const errorHandler = (err, req, res, next) => {
     code = 'TIMEOUT';
   }
 
-  // Create error response
   const errorResponse = {
     error: {
       code,
@@ -73,7 +65,6 @@ const errorHandler = (err, req, res, next) => {
     }
   };
 
-  // Add stack trace in development
   if (config.server.nodeEnv === 'development') {
     errorResponse.error.stack = err.stack;
     errorResponse.error.details = {
@@ -82,12 +73,10 @@ const errorHandler = (err, req, res, next) => {
     };
   }
 
-  // Add request ID if available
   if (req.id) {
     errorResponse.error.requestId = req.id;
   }
 
-  // Handle validation errors with details
   if (err.details && Array.isArray(err.details)) {
     errorResponse.error.validationErrors = err.details.map(detail => ({
       field: detail.path ? detail.path.join('.') : 'unknown',
@@ -96,10 +85,8 @@ const errorHandler = (err, req, res, next) => {
     }));
   }
 
-  // Send error response
   res.status(status).json(errorResponse);
 
-  // Log critical errors
   if (status >= 500) {
     logger.error('Critical error occurred', {
       error: err.message,
@@ -111,19 +98,12 @@ const errorHandler = (err, req, res, next) => {
   }
 };
 
-/**
- * Async error wrapper for route handlers
- * Catches async errors and passes them to the error handler
- */
 const asyncHandler = (fn) => {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 };
 
-/**
- * 404 Not Found handler
- */
 const notFoundHandler = (req, res) => {
   const error = {
     error: {
@@ -139,9 +119,6 @@ const notFoundHandler = (req, res) => {
   res.status(404).json(error);
 };
 
-/**
- * Rate limit error handler
- */
 const rateLimitHandler = (req, res) => {
   const error = {
     error: {
@@ -165,9 +142,6 @@ const rateLimitHandler = (req, res) => {
   res.status(429).json(error);
 };
 
-/**
- * Create application error
- */
 class AppError extends Error {
   constructor(message, statusCode = 500, code = 'APP_ERROR') {
     super(message);
@@ -180,9 +154,6 @@ class AppError extends Error {
   }
 }
 
-/**
- * Create validation error
- */
 class ValidationError extends Error {
   constructor(message, details = []) {
     super(message);
@@ -197,9 +168,6 @@ class ValidationError extends Error {
   }
 }
 
-/**
- * Create authentication error
- */
 class AuthenticationError extends Error {
   constructor(message = 'Authentication required') {
     super(message);
@@ -213,9 +181,6 @@ class AuthenticationError extends Error {
   }
 }
 
-/**
- * Create authorization error
- */
 class AuthorizationError extends Error {
   constructor(message = 'Insufficient permissions') {
     super(message);

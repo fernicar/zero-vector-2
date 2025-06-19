@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Zero-Vector MCP Server (Clean)
- * Streamlined Model Context Protocol server for Zero-Vector persona and memory management
- */
-
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -18,15 +13,13 @@ import { graphTools } from './tools/graph.js';
 
 const logger = createLogger('MCPServer');
 
-// Combine all tools (17 total - enhanced with graph capabilities)
 const allTools = [
-  ...personaTools,    // 5 tools
-  ...memoryTools,     // 5 tools  
-  ...utilityTools,    // 3 tools
-  ...graphTools       // 4 tools (v2.0 graph capabilities)
+  ...personaTools,
+  ...memoryTools,
+  ...utilityTools,
+  ...graphTools
 ];
 
-// Create server instance
 const server = new Server(
   {
     name: config.server.name,
@@ -39,7 +32,6 @@ const server = new Server(
   }
 );
 
-// Error handling function
 const handleError = (error, toolName) => {
   logger.error(`Error in ${toolName}`, {
     error: error.message,
@@ -55,7 +47,6 @@ const handleError = (error, toolName) => {
   };
 };
 
-// List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   logger.info('Listing available tools', { count: allTools.length });
 
@@ -68,16 +59,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Handle tool execution
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  
-  logger.info('Executing tool', { 
-    toolName: name, 
+
+  logger.info('Executing tool', {
+    toolName: name,
     hasArguments: !!args && Object.keys(args).length > 0
   });
 
-  // Find the tool
   const tool = allTools.find(t => t.name === name);
   if (!tool) {
     logger.warn('Tool not found', { toolName: name });
@@ -91,7 +80,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   try {
-    // Execute the tool
     const startTime = Date.now();
     const result = await tool.handler(args || {});
     const executionTime = Date.now() - startTime;
@@ -109,13 +97,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Enhanced error handling
 const handleUncaughtError = (error, type) => {
   logger.error(`Uncaught ${type}`, {
     error: error.message,
     stack: error.stack
   });
-  
+
   console.error(`🚨 Uncaught ${type}:`, error);
 };
 
@@ -127,10 +114,9 @@ process.on('unhandledRejection', (reason) => {
   handleUncaughtError(new Error(String(reason)), 'promise rejection');
 });
 
-// Graceful shutdown
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}, shutting down gracefully`);
-  
+
   setTimeout(() => {
     logger.info('Zero-Vector MCP Server (Clean) stopped');
     process.exit(0);
@@ -140,7 +126,6 @@ const gracefulShutdown = (signal) => {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-// Start the server
 async function startServer() {
   try {
     logger.info('Starting Zero-Vector MCP Server (Clean)', {
@@ -149,12 +134,10 @@ async function startServer() {
       serverUrl: config.zeroVector.baseUrl
     });
 
-    // Create transport
     const transport = new StdioServerTransport();
-    
-    // Connect server to transport
+
     await server.connect(transport);
-    
+
     logger.info('Zero-Vector MCP Server (Clean) started successfully', {
       tools: allTools.map(t => t.name)
     });
@@ -164,15 +147,13 @@ async function startServer() {
       error: error.message,
       stack: error.stack
     });
-    
+
     console.error('❌ Failed to start Zero-Vector MCP Server (Clean):', error.message);
     process.exit(1);
   }
 }
 
-// Handle CLI arguments for standalone testing
 if (process.argv.includes('--test-connection')) {
-  // Test connection mode
   import('./tools/utilities.js').then(({ utilityTools }) => {
     const testConnection = utilityTools.find(tool => tool.name === 'test_connection');
     if (testConnection) {
@@ -186,7 +167,6 @@ if (process.argv.includes('--test-connection')) {
     }
   });
 } else if (process.argv.includes('--list-tools')) {
-  // List tools mode
   console.log('📋 Available Zero-Vector MCP Tools (Clean):\n');
   allTools.forEach((tool, index) => {
     console.log(`${index + 1}. ${tool.name}`);
@@ -195,13 +175,10 @@ if (process.argv.includes('--test-connection')) {
   });
   process.exit(0);
 } else if (process.argv.includes('--version')) {
-  // Version mode
   console.log(`Zero-Vector MCP Server (Clean) v${config.server.version}`);
   process.exit(0);
 } else {
-  // Normal MCP server mode
   startServer();
 }
 
-// Export for testing
 export { server, allTools };

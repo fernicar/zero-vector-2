@@ -1,15 +1,10 @@
 const { logger } = require('../utils/logger');
 
-/**
- * JWT Authentication Middleware
- * Validates JWT tokens and attaches user information to request
- */
 const authenticateJWT = (jwtService) => {
   return async (req, res, next) => {
     try {
-      // Extract JWT token from Authorization header
       const authHeader = req.headers['authorization'];
-      
+
       if (!authHeader) {
         return res.status(401).json({
           status: 'error',
@@ -35,10 +30,8 @@ const authenticateJWT = (jwtService) => {
 
       const token = tokenMatch[1];
 
-      // Verify JWT token
       const decoded = await jwtService.verifyAccessToken(token);
-      
-      // Attach user data to request
+
       req.user = {
         id: decoded.userId,
         email: decoded.email,
@@ -50,7 +43,6 @@ const authenticateJWT = (jwtService) => {
         exp: decoded.exp
       };
 
-      // Add user info to response headers for debugging
       if (req.headers['x-debug'] === 'true') {
         res.setHeader('X-User-ID', decoded.userId);
         res.setHeader('X-User-Role', decoded.role);
@@ -74,7 +66,6 @@ const authenticateJWT = (jwtService) => {
         ip: req.ip
       });
 
-      // Handle specific JWT errors
       if (error.message === 'Token expired') {
         return res.status(401).json({
           status: 'error',

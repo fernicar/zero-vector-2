@@ -2,50 +2,31 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const { logger, logError } = require('../utils/logger');
 
-/**
- * Graph Database Service
- * Handles knowledge graph operations including entity and relationship management
- */
 class GraphDatabaseService {
   constructor(database) {
     this.database = database;
   }
 
-  /**
-   * Generate deterministic entity ID based on persona, name, and type
-   */
   generateEntityId(personaId, name, type) {
     const normalizedName = this.normalizeEntityName(name);
     const content = `${personaId}:${normalizedName}:${type}`;
     return crypto.createHash('sha256').update(content).digest('hex').substring(0, 32);
   }
 
-  /**
-   * Generate deterministic relationship ID
-   */
   generateRelationshipId(personaId, sourceEntityId, targetEntityId, relationshipType) {
     const content = `${personaId}:${sourceEntityId}:${targetEntityId}:${relationshipType}`;
     return crypto.createHash('sha256').update(content).digest('hex').substring(0, 32);
   }
 
-  /**
-   * Normalize entity name for consistent lookups
-   */
   normalizeEntityName(name) {
     return name.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
   }
 
-  /**
-   * Generate content hash for entity
-   */
   generateContentHash(name, type, properties = {}) {
     const content = JSON.stringify({ name, type, properties }, Object.keys({ name, type, properties }).sort());
     return crypto.createHash('md5').update(content).digest('hex');
   }
 
-  /**
-   * Validate entity exists before creating relationships
-   */
   async validateEntityExists(entityId) {
     try {
       const entity = await this.database.getEntityById(entityId);
@@ -56,27 +37,20 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Create or update an entity in the knowledge graph
-   */
   async createEntity(entityData) {
     try {
-      // Generate deterministic entity ID
       const entityId = entityData.id || this.generateEntityId(
         entityData.personaId,
         entityData.name,
         entityData.type
       );
 
-      // Normalize entity name for consistent lookups
       const normalizedName = this.normalizeEntityName(entityData.name);
       const contentHash = this.generateContentHash(entityData.name, entityData.type, entityData.properties);
 
-      // Check if entity already exists with same ID
       const existingEntity = await this.database.getEntityById(entityId);
 
       if (existingEntity) {
-        // Update existing entity with higher confidence if provided
         if ((entityData.confidence || 1.0) > existingEntity.confidence) {
           await this.updateEntity(existingEntity.id, {
             confidence: entityData.confidence || 1.0,
@@ -87,17 +61,16 @@ class GraphDatabaseService {
             },
             contentHash: contentHash
           });
-          
+
           logger.info('Updated existing entity with higher confidence', {
             entityId: existingEntity.id,
             name: entityData.name,
             oldConfidence: existingEntity.confidence,
             newConfidence: entityData.confidence || 1.0
           });
-          
+
           return existingEntity.id;
         } else {
-          // Entity exists with equal or higher confidence, return existing ID
           logger.debug('Entity already exists with sufficient confidence', {
             entityId: existingEntity.id,
             name: entityData.name,
@@ -108,7 +81,6 @@ class GraphDatabaseService {
       }
 
       try {
-        // Create new entity with enhanced data
         await this.database.insertEntity({
           id: entityId,
           personaId: entityData.personaId,
@@ -133,9 +105,7 @@ class GraphDatabaseService {
         return entityId;
 
       } catch (insertError) {
-        // Check if this is a UNIQUE constraint violation
         if (insertError.message && insertError.message.includes('UNIQUE constraint failed')) {
-          // Entity was created by another process, find and return the existing entity
           logger.warn('UNIQUE constraint violation, finding existing entity', {
             personaId: entityData.personaId,
             name: entityData.name,
@@ -143,13 +113,12 @@ class GraphDatabaseService {
             error: insertError.message
           });
 
-          // Try to find existing entity by normalized name and type
           const existingEntities = await this.database.getEntitiesByPersona(entityData.personaId, {
             limit: 100
           });
 
-          const matchingEntity = existingEntities.find(entity => 
-            entity.type === entityData.type && 
+          const matchingEntity = existingEntities.find(entity =>
+            entity.type === entityData.type &&
             entity.normalized_name === normalizedName
           );
 
@@ -161,7 +130,6 @@ class GraphDatabaseService {
             });
             return matchingEntity.id;
           } else {
-            // If we can't find the entity, something is wrong
             logger.error('Could not find entity after UNIQUE constraint violation', {
               personaId: entityData.personaId,
               name: entityData.name,
@@ -171,7 +139,6 @@ class GraphDatabaseService {
             throw insertError;
           }
         } else {
-          // Some other error, re-throw it
           throw insertError;
         }
       }
@@ -189,12 +156,8 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Create or update a relationship between entities
-   */
   async createRelationship(relationshipData) {
     try {
-      // Validate that both entities exist before creating relationship
       const sourceExists = await this.validateEntityExists(relationshipData.sourceEntityId);
       const targetExists = await this.validateEntityExists(relationshipData.targetEntityId);
 
@@ -220,7 +183,6 @@ class GraphDatabaseService {
         throw error;
       }
 
-      // Enhanced duplicate detection: Check using the actual UNIQUE constraint fields
       const existingRelationshipByFields = await this.findExistingRelationship(
         relationshipData.personaId,
         relationshipData.sourceEntityId,
@@ -229,9 +191,8 @@ class GraphDatabaseService {
       );
 
       if (existingRelationshipByFields) {
-        // Update relationship strength using weighted average
         const newStrength = Math.min(1.0, (existingRelationshipByFields.strength + (relationshipData.strength || 1.0)) / 2);
-        
+
         await this.database.updateRelationship(existingRelationshipByFields.id, {
           strength: newStrength,
           context: relationshipData.context || existingRelationshipByFields.context,
@@ -256,7 +217,6 @@ class GraphDatabaseService {
         return existingRelationshipByFields.id;
       }
 
-      // Generate deterministic relationship ID
       const relationshipId = relationshipData.id || this.generateRelationshipId(
         relationshipData.personaId,
         relationshipData.sourceEntityId,
@@ -264,7 +224,6 @@ class GraphDatabaseService {
         relationshipData.relationshipType
       );
 
-      // Generate content hash for relationship
       const contentHash = this.generateContentHash(
         `${relationshipData.sourceEntityId}:${relationshipData.targetEntityId}`,
         relationshipData.relationshipType,
@@ -272,7 +231,6 @@ class GraphDatabaseService {
       );
 
       try {
-        // Create new relationship with validation passed
         await this.database.insertRelationship({
           id: relationshipId,
           personaId: relationshipData.personaId,
@@ -297,7 +255,6 @@ class GraphDatabaseService {
         return relationshipId;
 
       } catch (insertError) {
-        // Handle UNIQUE constraint violations as a safety net
         if (insertError.message && insertError.message.includes('UNIQUE constraint failed')) {
           logger.warn('UNIQUE constraint violation, finding existing relationship', {
             personaId: relationshipData.personaId,
@@ -307,7 +264,6 @@ class GraphDatabaseService {
             error: insertError.message
           });
 
-          // Try to find the existing relationship again
           const existingRelationship = await this.findExistingRelationship(
             relationshipData.personaId,
             relationshipData.sourceEntityId,
@@ -325,7 +281,6 @@ class GraphDatabaseService {
             });
             return existingRelationship.id;
           } else {
-            // If we still can't find it, something is seriously wrong
             logger.error('Could not find relationship after UNIQUE constraint violation', {
               personaId: relationshipData.personaId,
               sourceEntityId: relationshipData.sourceEntityId,
@@ -335,7 +290,6 @@ class GraphDatabaseService {
             throw insertError;
           }
         } else {
-          // Some other error, re-throw it
           throw insertError;
         }
       }
@@ -354,38 +308,33 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Process extracted entities and relationships from content
-   */
   async processEntitiesAndRelationships(entities, relationships) {
     try {
       const processedEntities = [];
       const processedRelationships = [];
-      const entityIdMapping = new Map(); // Map original random IDs to new deterministic IDs
+      const entityIdMapping = new Map();
 
-      // Process entities first and build ID mapping
       for (const entity of entities) {
         try {
           const originalId = entity.id;
           const newEntityId = await this.createEntity(entity);
-          
-          // Track the mapping from original ID to new deterministic ID
+
           entityIdMapping.set(originalId, newEntityId);
-          
+
           processedEntities.push({
             ...entity,
             id: newEntityId,
             originalId: originalId,
             status: 'processed'
           });
-          
+
           logger.debug('Entity processed with ID mapping', {
             originalId,
             newId: newEntityId,
             entityName: entity.name,
             entityType: entity.type
           });
-          
+
         } catch (error) {
           logError(error, {
             operation: 'processEntity',
@@ -401,7 +350,6 @@ class GraphDatabaseService {
         }
       }
 
-      // Update relationship entity IDs to use new deterministic IDs
       const updatedRelationships = relationships.map(relationship => {
         const originalSourceId = relationship.sourceEntityId;
         const originalTargetId = relationship.targetEntityId;
@@ -427,27 +375,25 @@ class GraphDatabaseService {
         };
       });
 
-      // Process relationships with updated entity IDs
       for (const relationship of updatedRelationships) {
         try {
-          // Only process if both entities were successfully created
-          if (entityIdMapping.has(relationship.originalSourceId) && 
+          if (entityIdMapping.has(relationship.originalSourceId) &&
               entityIdMapping.has(relationship.originalTargetId)) {
-            
+
             const relationshipId = await this.createRelationship(relationship);
             processedRelationships.push({
               ...relationship,
               id: relationshipId,
               status: 'processed'
             });
-            
+
             logger.debug('Relationship processed with updated IDs', {
               relationshipId,
               sourceEntityId: relationship.sourceEntityId,
               targetEntityId: relationship.targetEntityId,
               relationshipType: relationship.relationshipType
             });
-            
+
           } else {
             throw new Error(`Missing source or target entity for relationship: ${relationship.originalSourceId} -> ${relationship.originalTargetId}`);
           }
@@ -485,7 +431,7 @@ class GraphDatabaseService {
         entities: processedEntities,
         relationships: processedRelationships,
         summary,
-        entityIdMapping: Object.fromEntries(entityIdMapping) // Include mapping in response for debugging
+        entityIdMapping: Object.fromEntries(entityIdMapping)
       };
 
     } catch (error) {
@@ -498,9 +444,6 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Find related entities using graph traversal
-   */
   async findRelatedEntities(entityId, options = {}) {
     try {
       const {
@@ -511,34 +454,29 @@ class GraphDatabaseService {
         relationshipTypes = null
       } = options;
 
-      // Use database's graph traversal method
       const relatedEntities = await this.database.findRelatedEntities(entityId, maxDepth, limit);
 
-      // Filter by entity types if specified
       let filteredEntities = relatedEntities;
       if (entityTypes && Array.isArray(entityTypes)) {
-        filteredEntities = filteredEntities.filter(entity => 
+        filteredEntities = filteredEntities.filter(entity =>
           entityTypes.includes(entity.type)
         );
       }
 
-      // Filter by minimum confidence (using confidence as a proxy for strength)
       if (minStrength > 0) {
-        filteredEntities = filteredEntities.filter(entity => 
+        filteredEntities = filteredEntities.filter(entity =>
           entity.confidence >= minStrength
         );
       }
 
-      // Get relationship information for each related entity
       const enrichedEntities = await Promise.all(
         filteredEntities.map(async (entity) => {
           try {
             const relationships = await this.database.getEntityRelationships(entity.entity_id, 'both', 5);
-            
-            // Filter relationships if types specified
+
             let filteredRelationships = relationships;
             if (relationshipTypes && Array.isArray(relationshipTypes)) {
-              filteredRelationships = relationships.filter(rel => 
+              filteredRelationships = relationships.filter(rel =>
                 relationshipTypes.includes(rel.relationship_type)
               );
             }
@@ -593,9 +531,6 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Get knowledge graph context for entities
-   */
   async getGraphContext(entityIds, options = {}) {
     try {
       const {
@@ -610,7 +545,6 @@ class GraphDatabaseService {
         connections: []
       };
 
-      // Get detailed information for each entity
       for (const entityId of entityIds) {
         try {
           const entity = await this.database.getEntityById(entityId);
@@ -619,19 +553,18 @@ class GraphDatabaseService {
 
             if (includeRelationships) {
               const relationships = await this.database.getEntityRelationships(
-                entityId, 
-                'both', 
+                entityId,
+                'both',
                 maxRelationships
               );
-              
+
               context.relationships.push(...relationships);
 
-              // Find connections between the requested entities
-              const connections = relationships.filter(rel => 
-                entityIds.includes(rel.source_entity_id) || 
+              const connections = relationships.filter(rel =>
+                entityIds.includes(rel.source_entity_id) ||
                 entityIds.includes(rel.target_entity_id)
               );
-              
+
               context.connections.push(...connections);
             }
           }
@@ -643,7 +576,6 @@ class GraphDatabaseService {
         }
       }
 
-      // Remove duplicate relationships
       context.relationships = this.deduplicateRelationships(context.relationships);
       context.connections = this.deduplicateRelationships(context.connections);
 
@@ -665,9 +597,6 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Search entities by similarity to query terms
-   */
   async searchEntities(personaId, query, options = {}) {
     try {
       const {
@@ -676,46 +605,38 @@ class GraphDatabaseService {
         minConfidence = 0.0
       } = options;
 
-      // Simple text-based search for now (could be enhanced with semantic search later)
       const searchTerms = query.toLowerCase().split(/\s+/);
       let allEntities = await this.database.getEntitiesByPersona(personaId, {
-        limit: 1000 // Get more for filtering
+        limit: 1000
       });
 
-      // Filter by entity types if specified
       if (entityTypes && Array.isArray(entityTypes)) {
-        allEntities = allEntities.filter(entity => 
+        allEntities = allEntities.filter(entity =>
           entityTypes.includes(entity.type)
         );
       }
 
-      // Filter by minimum confidence
-      allEntities = allEntities.filter(entity => 
+      allEntities = allEntities.filter(entity =>
         entity.confidence >= minConfidence
       );
 
-      // Score entities based on query similarity
       const scoredEntities = allEntities.map(entity => {
         const name = entity.name.toLowerCase();
         let score = 0;
 
-        // Exact match gets highest score
         if (name === query.toLowerCase()) {
           score = 1.0;
         } else {
-          // Partial matches
           for (const term of searchTerms) {
             if (name.includes(term)) {
               score += 0.5 / searchTerms.length;
             }
-            // Word boundary matches get higher score
             if (name.match(new RegExp(`\\b${term}\\b`))) {
               score += 0.3 / searchTerms.length;
             }
           }
         }
 
-        // Boost score by entity confidence
         score *= entity.confidence;
 
         return {
@@ -724,7 +645,6 @@ class GraphDatabaseService {
         };
       });
 
-      // Sort by search score and limit results
       const results = scoredEntities
         .filter(entity => entity.searchScore > 0)
         .sort((a, b) => b.searchScore - a.searchScore)
@@ -749,22 +669,16 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Get knowledge graph statistics for a persona
-   */
   async getGraphStatistics(personaId) {
     try {
       const stats = await this.database.getGraphStats(personaId);
-      
-      // Add additional derived statistics
+
       const totalNodes = stats.totalEntities;
       const totalEdges = stats.totalRelationships;
       const density = totalNodes > 1 ? (2 * totalEdges) / (totalNodes * (totalNodes - 1)) : 0;
-      
-      // Calculate average relationships per entity
+
       const avgRelationshipsPerEntity = totalNodes > 0 ? totalEdges / totalNodes : 0;
 
-      // Transform entityTypes array to include percentages and proper field names
       const transformedEntityTypes = stats.entityTypes.map(entityType => ({
         type: entityType.type,
         count: entityType.count,
@@ -772,9 +686,8 @@ class GraphDatabaseService {
         avgConfidence: entityType.avg_confidence ? parseFloat(entityType.avg_confidence.toFixed(3)) : 0.0
       }));
 
-      // Transform relationshipTypes array to include percentages and proper field names
       const transformedRelationshipTypes = stats.relationshipTypes.map(relType => ({
-        type: relType.relationship_type, // Transform field name from relationship_type to type
+        type: relType.relationship_type,
         count: relType.count,
         percentage: totalEdges > 0 ? parseFloat(((relType.count / totalEdges) * 100).toFixed(1)) : 0.0,
         avgStrength: relType.avg_strength ? parseFloat(relType.avg_strength.toFixed(3)) : 0.0
@@ -819,14 +732,11 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Helper method to find entity by name and type
-   */
   async findEntityByNameAndType(personaId, name, type) {
     try {
       const entities = await this.database.searchEntitiesByName(personaId, name, 5);
-      return entities.find(entity => 
-        entity.type === type && 
+      return entities.find(entity =>
+        entity.type === type &&
         entity.name.toLowerCase() === name.toLowerCase()
       );
     } catch (error) {
@@ -840,9 +750,6 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Find existing relationship using UNIQUE constraint fields
-   */
   async findExistingRelationship(personaId, sourceEntityId, targetEntityId, relationshipType) {
     try {
       const relationship = await this.database.findRelationshipByFields(
@@ -851,7 +758,7 @@ class GraphDatabaseService {
         targetEntityId,
         relationshipType
       );
-      
+
       if (relationship) {
         logger.debug('Found existing relationship by constraint fields', {
           relationshipId: relationship.id,
@@ -861,7 +768,7 @@ class GraphDatabaseService {
           relationshipType
         });
       }
-      
+
       return relationship;
     } catch (error) {
       logError(error, {
@@ -875,14 +782,11 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Helper method to find existing relationship (legacy method)
-   */
   async findRelationship(sourceEntityId, targetEntityId, relationshipType) {
     try {
       const relationships = await this.database.getEntityRelationships(sourceEntityId, 'outgoing', 100);
-      return relationships.find(rel => 
-        rel.target_entity_id === targetEntityId && 
+      return relationships.find(rel =>
+        rel.target_entity_id === targetEntityId &&
         rel.relationship_type === relationshipType
       );
     } catch (error) {
@@ -896,9 +800,6 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Helper method to update entity
-   */
   async updateEntity(entityId, updates) {
     try {
       await this.database.updateEntity(entityId, updates);
@@ -913,9 +814,6 @@ class GraphDatabaseService {
     }
   }
 
-  /**
-   * Helper method to deduplicate relationships
-   */
   deduplicateRelationships(relationships) {
     const seen = new Set();
     return relationships.filter(rel => {
@@ -928,9 +826,6 @@ class GraphDatabaseService {
     });
   }
 
-  /**
-   * Calculate graph complexity based on statistics
-   */
   calculateGraphComplexity(stats) {
     const totalEntities = stats.totalEntities;
     const totalRelationships = stats.totalRelationships;
@@ -943,25 +838,18 @@ class GraphDatabaseService {
     return 'very_high';
   }
 
-  /**
-   * Clean up orphaned entities (entities with no relationships)
-   */
-  async cleanupOrphanedEntities(personaId, maxAge = 30 * 24 * 60 * 60 * 1000) { // 30 days
+  async cleanupOrphanedEntities(personaId, maxAge = 30 * 24 * 60 * 60 * 1000) {
     try {
       const cutoffTime = Date.now() - maxAge;
       let cleanedCount = 0;
 
-      // Get all entities for the persona
       const entities = await this.database.getEntitiesByPersona(personaId);
 
       for (const entity of entities) {
-        // Skip if entity is recent
         if (entity.created_at > cutoffTime) continue;
 
-        // Check if entity has any relationships
         const relationships = await this.database.getEntityRelationships(entity.id, 'both', 1);
-        
-        // If no relationships and entity is old, consider for cleanup
+
         if (relationships.length === 0 && entity.confidence < 0.5) {
           await this.database.deleteEntity(entity.id);
           cleanedCount++;

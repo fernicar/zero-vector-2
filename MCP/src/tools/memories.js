@@ -1,8 +1,3 @@
-/**
- * Memory Management Tools for Zero-Vector MCP Server
- * Streamlined tools for storing, searching, and managing persona memories
- */
-
 import apiClient from '../apiClient.js';
 import { memorySchemas, validateInput } from '../utils/validation.js';
 import { createLogger } from '../utils/logger.js';
@@ -10,9 +5,6 @@ import { formatTimestamp } from '../utils/dateHelpers.js';
 
 const logger = createLogger('MemoryTools');
 
-/**
- * Add a memory to a persona
- */
 export const addMemory = {
   name: 'add_memory',
   description: 'Add a memory to a specific persona with optional context and importance',
@@ -46,7 +38,6 @@ export const addMemory = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(memorySchemas.addMemory, params, 'add_memory');
       if (!validation.valid) {
         return {
@@ -60,7 +51,6 @@ export const addMemory = {
 
       const validParams = validation.value;
 
-      // Add memory via API
       const result = await apiClient.post(`/api/personas/${validParams.personaId}/memories`, validParams);
 
       if (!result.success) {
@@ -117,9 +107,6 @@ export const addMemory = {
   }
 };
 
-/**
- * Search persona memories
- */
 export const searchPersonaMemories = {
   name: 'search_persona_memories',
   description: 'Search through a persona\'s memories using semantic similarity',
@@ -160,7 +147,6 @@ export const searchPersonaMemories = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(memorySchemas.searchPersonaMemories, params, 'search_persona_memories');
       if (!validation.valid) {
         return {
@@ -174,7 +160,6 @@ export const searchPersonaMemories = {
 
       const { personaId, ...searchParams } = validation.value;
 
-      // Search memories via API
       const result = await apiClient.post(`/api/personas/${personaId}/memories/search`, searchParams);
 
       if (!result.success) {
@@ -211,7 +196,6 @@ export const searchPersonaMemories = {
         };
       }
 
-      // Format results
       let resultText = `🧠 **Found ${memories.length} relevant memories**\n\n`;
       resultText += `👤 **Persona:** ${personaId}\n`;
       resultText += `🔍 **Query:** "${searchParams.query}"\n`;
@@ -227,30 +211,25 @@ export const searchPersonaMemories = {
         resultText += `• **Similarity:** ${memory.similarity.toFixed(4)}\n`;
         resultText += `• **Type:** ${memory.metadata.memoryType}\n`;
         resultText += `• **Importance:** ${memory.metadata.importance}\n`;
-        
-        // Show content preview - check multiple possible field locations
-        // The PersonaMemoryManager stores content in metadata.originalContent after database enrichment
-        const content = memory.metadata?.originalContent || 
-                       memory.metadata?.content || 
-                       memory.content || 
+
+        const content = memory.metadata?.originalContent ||
+                       memory.metadata?.content ||
+                       memory.content ||
                        (memory.metadata?.customMetadata?.originalContent);
-        
+
         if (content && typeof content === 'string' && content.trim().length > 0) {
           const preview = content.length > 150 ? content.substring(0, 150) + '...' : content;
           resultText += `• **Content:** ${preview}\n`;
         } else {
-          // Debug info to help identify the issue
           const metadataKeys = memory.metadata ? Object.keys(memory.metadata) : ['no metadata'];
           resultText += `• **Content:** [Content not found]\n`;
           resultText += `• **Debug - Available fields:** ${metadataKeys.join(', ')}\n`;
-          
-          // Show a sample of what's in metadata for troubleshooting
+
           if (memory.metadata && Object.keys(memory.metadata).length > 0) {
             const sampleValue = memory.metadata[metadataKeys[0]];
             resultText += `• **Debug - Sample value:** ${typeof sampleValue} ${JSON.stringify(sampleValue).substring(0, 50)}...\n`;
           }
-          
-          // Log additional debug info
+
           logger.debug('Memory content debug', {
             memoryId: memory.id,
             hasMetadata: !!memory.metadata,
@@ -261,18 +240,18 @@ export const searchPersonaMemories = {
             fullMetadata: JSON.stringify(memory.metadata).substring(0, 200)
           });
         }
-        
+
         if (memory.metadata.timestamp) {
           resultText += `• **Created:** ${formatTimestamp(memory.metadata.timestamp, 'date')}\n`;
         }
-        
+
         if (searchParams.include_context && memory.metadata.context) {
           const contextKeys = Object.keys(memory.metadata.context);
           if (contextKeys.length > 0) {
             resultText += `• **Context:** ${contextKeys.slice(0, 3).join(', ')}${contextKeys.length > 3 ? '...' : ''}\n`;
           }
         }
-        
+
         resultText += '\n';
       });
 
@@ -296,9 +275,6 @@ export const searchPersonaMemories = {
   }
 };
 
-/**
- * Add a conversation exchange
- */
 export const addConversation = {
   name: 'add_conversation',
   description: 'Add a conversation exchange (user message + assistant response) to a persona\'s memory',
@@ -331,7 +307,6 @@ export const addConversation = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(memorySchemas.addConversation, params, 'add_conversation');
       if (!validation.valid) {
         return {
@@ -345,7 +320,6 @@ export const addConversation = {
 
       const { personaId, ...conversationData } = validation.value;
 
-      // Add conversation via API
       const result = await apiClient.post(`/api/personas/${personaId}/conversations`, conversationData);
 
       if (!result.success) {
@@ -377,11 +351,11 @@ export const addConversation = {
       resultText += `👤 **Persona ID:** ${personaId}\n`;
       resultText += `🗣️ **User Memory:** ${userMemory.id}\n`;
       resultText += `🤖 **Assistant Memory:** ${assistantMemory.id}\n\n`;
-      
+
       resultText += `📝 **Exchange Preview:**\n`;
       resultText += `**User:** ${conversationData.userMessage.substring(0, 100)}${conversationData.userMessage.length > 100 ? '...' : ''}\n`;
       resultText += `**Assistant:** ${conversationData.assistantResponse.substring(0, 100)}${conversationData.assistantResponse.length > 100 ? '...' : ''}\n\n`;
-      
+
       resultText += `📅 **Created:** ${formatTimestamp(userMemory.createdAt, 'iso')}`;
 
       return {
@@ -404,9 +378,6 @@ export const addConversation = {
   }
 };
 
-/**
- * Get conversation history
- */
 export const getConversationHistory = {
   name: 'get_conversation_history',
   description: 'Retrieve the complete history of a conversation',
@@ -435,7 +406,6 @@ export const getConversationHistory = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(memorySchemas.getConversationHistory, params, 'get_conversation_history');
       if (!validation.valid) {
         return {
@@ -449,7 +419,6 @@ export const getConversationHistory = {
 
       const { personaId, conversationId, ...queryParams } = validation.value;
 
-      // Get conversation history via API
       const result = await apiClient.get(`/api/personas/${personaId}/conversations/${conversationId}`, queryParams);
 
       if (!result.success) {
@@ -495,28 +464,26 @@ export const getConversationHistory = {
       }
       resultText += '\n';
 
-      // Sort by timestamp to ensure chronological order
       const sortedHistory = history.sort((a, b) => a.timestamp - b.timestamp);
 
       sortedHistory.forEach((message) => {
         const speaker = message.speaker === 'user' ? '🗣️ **User**' : '🤖 **Assistant**';
         const timestamp = formatTimestamp(message.timestamp, 'time');
-        
+
         resultText += `${speaker} (${timestamp})\n`;
-        
-        // Show content preview
+
         const content = message.content;
         if (content.length > 200) {
           resultText += `${content.substring(0, 200)}...\n`;
         } else {
           resultText += `${content}\n`;
         }
-        
+
         if (queryParams.include_context && message.context && Object.keys(message.context).length > 0) {
           const contextKeys = Object.keys(message.context);
           resultText += `*Context: ${contextKeys.slice(0, 2).join(', ')}${contextKeys.length > 2 ? '...' : ''}*\n`;
         }
-        
+
         resultText += '\n';
       });
 
@@ -540,9 +507,6 @@ export const getConversationHistory = {
   }
 };
 
-/**
- * Clean up persona memories
- */
 export const cleanupPersonaMemories = {
   name: 'cleanup_persona_memories',
   description: 'Clean up old or low-importance memories for a persona',
@@ -575,7 +539,6 @@ export const cleanupPersonaMemories = {
 
   async handler(params) {
     try {
-      // Validate input
       const validation = validateInput(memorySchemas.cleanupPersonaMemories, params, 'cleanup_persona_memories');
       if (!validation.valid) {
         return {
@@ -589,7 +552,6 @@ export const cleanupPersonaMemories = {
 
       const { personaId, ...cleanupParams } = validation.value;
 
-      // Clean up memories via API
       const result = await apiClient.post(`/api/personas/${personaId}/cleanup`, cleanupParams);
 
       if (!result.success) {
@@ -615,31 +577,31 @@ export const cleanupPersonaMemories = {
         dryRun: cleanupParams.dryRun
       });
 
-      let resultText = cleanupParams.dryRun 
+      let resultText = cleanupParams.dryRun
         ? `🔍 **Memory cleanup preview** (dry run)\n\n`
         : `🧹 **Memory cleanup completed**\n\n`;
-      
+
       resultText += `👤 **Persona ID:** ${personaId}\n`;
       resultText += `📊 **Memories affected:** ${cleanupResult.affected}\n`;
-      
+
       if (cleanupResult.breakdown) {
         resultText += `🏷️ **Breakdown by type:**\n`;
         Object.entries(cleanupResult.breakdown).forEach(([type, count]) => {
           resultText += `  • ${type}: ${count}\n`;
         });
       }
-      
+
       if (cleanupParams.olderThan) {
         const daysOld = Math.round(cleanupParams.olderThan / (24 * 60 * 60 * 1000));
         resultText += `📅 **Criteria:** Older than ${daysOld} days\n`;
       }
-      
+
       if (cleanupParams.memoryTypes) {
         resultText += `🏷️ **Types:** ${cleanupParams.memoryTypes.join(', ')}\n`;
       }
-      
+
       resultText += `⏱️ **Processing time:** ${cleanupResult.processingTime}ms\n`;
-      
+
       if (cleanupParams.dryRun) {
         resultText += `\n💡 Run without \`dryRun: true\` to actually delete these memories.`;
       } else {
@@ -666,7 +628,6 @@ export const cleanupPersonaMemories = {
   }
 };
 
-// Export all memory tools
 export const memoryTools = [
   addMemory,
   searchPersonaMemories,

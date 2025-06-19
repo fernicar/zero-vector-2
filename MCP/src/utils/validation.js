@@ -1,16 +1,9 @@
-/**
- * Input validation schemas for Zero-Vector MCP tools
- * Simplified validation for persona, memory, and utility operations
- */
-
 import joi from 'joi';
 
-// Common validation patterns
 const patterns = {
   uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 };
 
-// Persona operation schemas
 export const personaSchemas = {
   createPersona: joi.object({
     name: joi.string().min(1).max(100).required(),
@@ -21,7 +14,7 @@ export const personaSchemas = {
     embeddingProvider: joi.string().valid('openai', 'local').default('openai'),
     embeddingModel: joi.string().max(100).optional(),
     maxMemorySize: joi.number().integer().min(1).max(10000).default(1000),
-    memoryDecayTime: joi.number().integer().min(3600000).default(604800000) // 1 hour to 7 days in ms
+    memoryDecayTime: joi.number().integer().min(3600000).default(604800000)
   }),
 
   listPersonas: joi.object({
@@ -52,7 +45,6 @@ export const personaSchemas = {
   })
 };
 
-// Memory operation schemas
 export const memorySchemas = {
   addMemory: joi.object({
     personaId: joi.string().pattern(patterns.uuid).required(),
@@ -90,7 +82,7 @@ export const memorySchemas = {
 
   cleanupPersonaMemories: joi.object({
     personaId: joi.string().pattern(patterns.uuid).required(),
-    olderThan: joi.number().integer().min(3600000).optional(), // Minimum 1 hour
+    olderThan: joi.number().integer().min(3600000).optional(),
     memoryTypes: joi.array().items(
       joi.string().valid('conversation', 'fact', 'preference', 'context', 'system')
     ).optional(),
@@ -98,7 +90,6 @@ export const memorySchemas = {
   })
 };
 
-// System/utility operation schemas
 export const utilitySchemas = {
   getSystemHealth: joi.object({
     detailed: joi.boolean().default(false)
@@ -112,9 +103,6 @@ export const utilitySchemas = {
   testConnection: joi.object({})
 };
 
-/**
- * Validate input parameters against a schema
- */
 export function validateInput(schema, input, toolName = 'unknown') {
   const { error, value } = schema.validate(input, {
     abortEarly: false,
@@ -143,9 +131,6 @@ export function validateInput(schema, input, toolName = 'unknown') {
   };
 }
 
-/**
- * Validate UUID format
- */
 export function validateUUID(id, fieldName = 'id') {
   if (!id || typeof id !== 'string') {
     return {

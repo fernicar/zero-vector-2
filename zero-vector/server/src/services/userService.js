@@ -4,39 +4,27 @@ const config = require('../config');
 const { logger } = require('../utils/logger');
 const validator = require('validator');
 
-/**
- * User Service
- * Handles user registration, authentication, and management
- */
 class UserService {
   constructor(database) {
     this.database = database;
-    this.db = database.db; // Access the underlying SQLite connection
+    this.db = database.db;
   }
 
-  /**
-   * Register a new user
-   */
   async registerUser(userData) {
     try {
       const { email, password, role = 'user' } = userData;
 
-      // Validate input
       this.validateUserInput({ email, password, role });
 
-      // Check if user already exists
       const existingUser = await this.getUserByEmail(email);
       if (existingUser) {
         throw new Error('User already exists with this email');
       }
 
-      // Hash password
       const passwordHash = await bcrypt.hash(password, config.auth.bcryptRounds);
 
-      // Generate user ID
       const userId = crypto.randomUUID();
 
-      // Create user record
       const stmt = this.db.prepare(`
         INSERT INTO users (id, email, password_hash, role, created_at, is_active, failed_login_attempts, locked_until)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -68,9 +56,6 @@ class UserService {
     }
   }
 
-  /**
-   * Authenticate user with email and password
-   */
   async authenticateUser(email, password) {
     try {
       const user = await this.getUserByEmail(email);
@@ -78,29 +63,24 @@ class UserService {
         throw new Error('Invalid credentials');
       }
 
-      // Check if user is active
       if (!user.isActive) {
         throw new Error('User account is deactivated');
       }
 
-      // Check if user is locked
       if (user.lockedUntil && user.lockedUntil > Date.now()) {
         const lockoutEndTime = new Date(user.lockedUntil).toISOString();
         throw new Error(`Account is locked until ${lockoutEndTime}`);
       }
 
-      // Verify password
       const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-      
+
       if (!isValidPassword) {
         await this.handleFailedLogin(user.id);
         throw new Error('Invalid credentials');
       }
 
-      // Reset failed login attempts on successful login
       await this.resetFailedLoginAttempts(user.id);
 
-      // Update last login timestamp
       await this.updateLastLogin(user.id);
 
       logger.info('User authenticated successfully', {
@@ -124,15 +104,12 @@ class UserService {
     }
   }
 
-  /**
-   * Get user by email
-   */
   async getUserByEmail(email) {
     try {
       const stmt = this.db.prepare(`
-        SELECT id, email, password_hash, role, created_at, updated_at, last_login, 
+        SELECT id, email, password_hash, role, created_at, updated_at, last_login,
                is_active, failed_login_attempts, locked_until
-        FROM users 
+        FROM users
         WHERE email = ?
       `);
 
@@ -161,14 +138,11 @@ class UserService {
     }
   }
 
-  /**
-   * Get user by ID
-   */
   async getUserById(userId) {
     try {
       const stmt = this.db.prepare(`
         SELECT id, email, role, created_at, updated_at, last_login, is_active
-        FROM users 
+        FROM users
         WHERE id = ?
       `);
 
@@ -194,9 +168,6 @@ class UserService {
     }
   }
 
-  /**
-   * Update user role (admin only)
-   */
   async updateUserRole(userId, newRole) {
     try {
       if (!['admin', 'user', 'readonly'].includes(newRole)) {
@@ -204,13 +175,13 @@ class UserService {
       }
 
       const stmt = this.db.prepare(`
-        UPDATE users 
+        UPDATE users
         SET role = ?, updated_at = ?
         WHERE id = ?
       `);
 
       const result = stmt.run(newRole, Date.now(), userId);
-      
+
       if (result.changes === 0) {
         throw new Error('User not found');
       }
@@ -232,19 +203,16 @@ class UserService {
     }
   }
 
-  /**
-   * Deactivate user account
-   */
   async deactivateUser(userId) {
     try {
       const stmt = this.db.prepare(`
-        UPDATE users 
+        UPDATE users
         SET is_active = 0, updated_at = ?
         WHERE id = ?
       `);
 
       const result = stmt.run(Date.now(), userId);
-      
+
       if (result.changes === 0) {
         throw new Error('User not found');
       }
@@ -261,9 +229,6 @@ class UserService {
     }
   }
 
-  /**
-   * List all users (admin only, with pagination)
-   */
   async listUsers(page = 1, limit = 50) {
     try {
       const offset = (page - 1) * limit;
@@ -273,7 +238,7 @@ class UserService {
 
       const stmt = this.db.prepare(`
         SELECT id, email, role, created_at, last_login, is_active
-        FROM users 
+        FROM users
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
       `);
@@ -309,9 +274,6 @@ class UserService {
     }
   }
 
-  /**
-   * Handle failed login attempt
-   */
   async handleFailedLogin(userId) {
     try {
       const user = await this.getUserById(userId);
@@ -323,7 +285,7 @@ class UserService {
       }
 
       const stmt = this.db.prepare(`
-        UPDATE users 
+        UPDATE users
         SET failed_login_attempts = ?, locked_until = ?, updated_at = ?
         WHERE id = ?
       `);
@@ -346,13 +308,10 @@ class UserService {
     }
   }
 
-  /**
-   * Reset failed login attempts
-   */
   async resetFailedLoginAttempts(userId) {
     try {
       const stmt = this.db.prepare(`
-        UPDATE users 
+        UPDATE users
         SET failed_login_attempts = 0, locked_until = NULL, updated_at = ?
         WHERE id = ?
       `);
@@ -367,13 +326,10 @@ class UserService {
     }
   }
 
-  /**
-   * Update last login timestamp
-   */
   async updateLastLogin(userId) {
     try {
       const stmt = this.db.prepare(`
-        UPDATE users 
+        UPDATE users
         SET last_login = ?, updated_at = ?
         WHERE id = ?
       `);
@@ -388,9 +344,6 @@ class UserService {
     }
   }
 
-  /**
-   * Validate user input
-   */
   validateUserInput({ email, password, role }) {
     if (!email || !validator.isEmail(email)) {
       throw new Error('Valid email is required');
@@ -409,9 +362,6 @@ class UserService {
     }
   }
 
-  /**
-   * Change user password
-   */
   async changePassword(userId, currentPassword, newPassword) {
     try {
       const user = await this.getUserById(userId);
@@ -419,24 +369,19 @@ class UserService {
         throw new Error('User not found');
       }
 
-      // Get user with password hash
       const userWithPassword = await this.getUserByEmail(user.email);
-      
-      // Verify current password
+
       const isValidPassword = await bcrypt.compare(currentPassword, userWithPassword.passwordHash);
       if (!isValidPassword) {
         throw new Error('Current password is incorrect');
       }
 
-      // Validate new password
       this.validateUserInput({ email: user.email, password: newPassword });
 
-      // Hash new password
       const newPasswordHash = await bcrypt.hash(newPassword, config.auth.bcryptRounds);
 
-      // Update password
       const stmt = this.db.prepare(`
-        UPDATE users 
+        UPDATE users
         SET password_hash = ?, updated_at = ?
         WHERE id = ?
       `);

@@ -1,8 +1,3 @@
-/**
- * Zero-Vector API Client
- * Simplified HTTP client for persona and memory operations
- */
-
 import axios from 'axios';
 import config from './config.js';
 import { createLogger } from './utils/logger.js';
@@ -16,8 +11,7 @@ class ZeroVectorAPIClient {
     this.timeout = config.zeroVector.timeout;
     this.retryAttempts = config.zeroVector.retryAttempts;
     this.retryDelay = config.zeroVector.retryDelay;
-    
-    // Create axios instance
+
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: this.timeout,
@@ -28,7 +22,6 @@ class ZeroVectorAPIClient {
       }
     });
 
-    // Request logging
     this.client.interceptors.request.use(
       (config) => {
         logger.debug('API Request', {
@@ -40,7 +33,6 @@ class ZeroVectorAPIClient {
       }
     );
 
-    // Response logging
     this.client.interceptors.response.use(
       (response) => {
         logger.debug('API Response', {
@@ -67,9 +59,6 @@ class ZeroVectorAPIClient {
     );
   }
 
-  /**
-   * Execute HTTP request with retry logic
-   */
   async executeRequest(requestConfig, attempt = 1) {
     try {
       const response = await this.client(requestConfig);
@@ -79,12 +68,9 @@ class ZeroVectorAPIClient {
     }
   }
 
-  /**
-   * Handle successful API responses
-   */
   handleSuccessResponse(response) {
     const { status, data } = response;
-    
+
     if (data && typeof data === 'object') {
       if (data.status === 'success') {
         return {
@@ -95,20 +81,16 @@ class ZeroVectorAPIClient {
         };
       }
     }
-    
+
     return {
       success: true,
       data: data
     };
   }
 
-  /**
-   * Handle API error responses with retry logic
-   */
   async handleErrorResponse(error, requestConfig, attempt) {
     const { response } = error;
-    
-    // Check if we should retry (only for server errors and network issues)
+
     if (this.shouldRetry(error, attempt)) {
       const delay = this.retryDelay * Math.pow(2, attempt - 1);
       logger.info(`Retrying request after ${delay}ms`, {
@@ -116,12 +98,11 @@ class ZeroVectorAPIClient {
         maxAttempts: this.retryAttempts,
         url: requestConfig.url
       });
-      
+
       await new Promise(resolve => setTimeout(resolve, delay));
       return this.executeRequest(requestConfig, attempt + 1);
     }
 
-    // Network errors
     if (!response) {
       return {
         success: false,
@@ -131,21 +112,16 @@ class ZeroVectorAPIClient {
       };
     }
 
-    // HTTP error responses
     const { status, data } = response;
     return this.parseErrorResponse(status, data);
   }
 
-  /**
-   * Parse error responses into standard format
-   */
   parseErrorResponse(status, data) {
     const baseError = {
       success: false,
       statusCode: status
     };
 
-    // Handle Zero-Vector error format
     if (data && typeof data === 'object' && data.status === 'error') {
       return {
         ...baseError,
@@ -155,7 +131,6 @@ class ZeroVectorAPIClient {
       };
     }
 
-    // Standard HTTP error mappings
     const errorMappings = {
       400: { error: 'BAD_REQUEST', message: 'Invalid request parameters' },
       401: { error: 'UNAUTHORIZED', message: 'Invalid or missing API key' },
@@ -179,9 +154,6 @@ class ZeroVectorAPIClient {
     };
   }
 
-  /**
-   * Get contextual error suggestions
-   */
   getErrorSuggestion(status, errorCode) {
     const suggestions = {
       'PERSONA_NOT_FOUND': 'Check the persona ID is correct',
@@ -196,26 +168,18 @@ class ZeroVectorAPIClient {
     return suggestions[errorCode] || suggestions[status] || 'Check request and try again';
   }
 
-  /**
-   * Determine if request should be retried
-   */
   shouldRetry(error, attempt) {
     if (attempt >= this.retryAttempts) {
       return false;
     }
 
-    // Don't retry client errors (400-499)
     if (error.response && error.response.status >= 400 && error.response.status < 500) {
       return false;
     }
 
-    // Retry network errors and server errors (500+)
     return !error.response || error.response.status >= 500;
   }
 
-  /**
-   * Test connection to Zero-Vector server
-   */
   async testConnection() {
     try {
       const result = await this.executeRequest({
@@ -233,7 +197,6 @@ class ZeroVectorAPIClient {
     }
   }
 
-  // HTTP method helpers
   async get(url, params = {}) {
     return this.executeRequest({
       method: 'GET',
@@ -266,6 +229,5 @@ class ZeroVectorAPIClient {
   }
 }
 
-// Create and export singleton instance
 const apiClient = new ZeroVectorAPIClient();
 export default apiClient;

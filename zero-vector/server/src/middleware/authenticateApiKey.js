@@ -1,14 +1,9 @@
 const { logger } = require('../utils/logger');
 
-/**
- * API Key Authentication Middleware
- * Validates API keys and attaches key/user information to request
- */
 const authenticateApiKey = (apiKeyService) => {
   return async (req, res, next) => {
     try {
-      // Extract API key from header or query parameter
-      const apiKey = req.headers['x-api-key'] || 
+      const apiKey = req.headers['x-api-key'] ||
                    req.headers['authorization']?.replace('Bearer ', '') ||
                    req.query.api_key;
 
@@ -23,9 +18,8 @@ const authenticateApiKey = (apiKeyService) => {
         });
       }
 
-      // Validate API key
       const keyData = await apiKeyService.validateApiKey(apiKey);
-      
+
       if (!keyData) {
         return res.status(401).json({
           status: 'error',
@@ -36,12 +30,10 @@ const authenticateApiKey = (apiKeyService) => {
         });
       }
 
-      // Attach key and user data to request
       req.apiKey = keyData;
       req.user = keyData.user;
       req.authType = 'api_key';
 
-      // Add API key info to response headers for debugging
       if (req.headers['x-debug'] === 'true') {
         res.setHeader('X-API-Key-ID', keyData.id);
         res.setHeader('X-User-ID', keyData.userId);

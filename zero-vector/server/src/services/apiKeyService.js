@@ -3,19 +3,12 @@ const bcrypt = require('bcrypt');
 const config = require('../config');
 const { logger } = require('../utils/logger');
 
-/**
- * API Key Service
- * Handles API key generation, validation, and management
- */
 class ApiKeyService {
   constructor(database) {
     this.database = database;
-    this.db = database.db; // Access the underlying SQLite connection
+    this.db = database.db;
   }
 
-  /**
-   * Generate a new API key for a user
-   */
   async createApiKey(userId, keyData = {}) {
     try {
       const {
@@ -25,27 +18,21 @@ class ApiKeyService {
         expiresInDays = 365
       } = keyData;
 
-      // Validate permissions
       this.validatePermissions(permissions);
 
-      // Generate cryptographically secure key
       const rawKey = crypto.randomBytes(32).toString('hex');
       const keyPrefix = 'vdb_';
       const fullKey = `${keyPrefix}${rawKey}`;
 
-      // Hash for storage
       const hashedKey = await bcrypt.hash(fullKey, config.security.apiKeySaltRounds);
 
-      // Generate API key ID
       const keyId = crypto.randomUUID();
 
-      // Calculate expiration
       const expiresAt = Date.now() + (expiresInDays * 24 * 60 * 60 * 1000);
 
-      // Create API key record
       const stmt = this.db.prepare(`
         INSERT INTO api_keys (
-          id, user_id, key_hash, name, permissions, rate_limit, 
+          id, user_id, key_hash, name, permissions, rate_limit,
           expires_at, created_at, last_used, is_active, usage_count
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -77,7 +64,7 @@ class ApiKeyService {
 
       return {
         id: keyId,
-        key: fullKey, // Only returned once at creation
+        key: fullKey,
         name,
         permissions,
         rateLimit,
@@ -95,16 +82,12 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Validate an API key and return key information
-   */
   async validateApiKey(providedKey) {
     try {
       if (!providedKey || !providedKey.startsWith('vdb_')) {
         return null;
       }
 
-      // Get all active keys
       const stmt = this.db.prepare(`
         SELECT ak.*, u.id as user_id, u.email, u.role, u.is_active as user_active
         FROM api_keys ak
@@ -115,21 +98,17 @@ class ApiKeyService {
       const keys = stmt.all();
 
       for (const keyRecord of keys) {
-        // Check expiration
         if (keyRecord.expires_at < Date.now()) {
           await this.deactivateApiKey(keyRecord.id);
           continue;
         }
 
-        // Check if user is active
         if (!keyRecord.user_active) {
           continue;
         }
 
-        // Verify key
         const isValid = await bcrypt.compare(providedKey, keyRecord.key_hash);
         if (isValid) {
-          // Update last used timestamp and usage count
           await this.updateKeyUsage(keyRecord.id);
 
           logger.info('API key validated successfully', {
@@ -162,19 +141,16 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * List API keys for a user
-   */
   async listApiKeys(userId, includeInactive = false) {
     try {
-      const whereClause = includeInactive 
-        ? 'WHERE user_id = ?' 
+      const whereClause = includeInactive
+        ? 'WHERE user_id = ?'
         : 'WHERE user_id = ? AND is_active = 1';
 
       const stmt = this.db.prepare(`
-        SELECT id, name, permissions, rate_limit, expires_at, created_at, 
+        SELECT id, name, permissions, rate_limit, expires_at, created_at,
                last_used, is_active, usage_count
-        FROM api_keys 
+        FROM api_keys
         ${whereClause}
         ORDER BY created_at DESC
       `);
@@ -205,9 +181,6 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Update API key permissions or settings
-   */
   async updateApiKey(keyId, userId, updates) {
     try {
       const {
@@ -217,12 +190,10 @@ class ApiKeyService {
         isActive
       } = updates;
 
-      // Validate permissions if provided
       if (permissions) {
         this.validatePermissions(permissions);
       }
 
-      // Build update query dynamically
       const updateFields = [];
       const values = [];
 
@@ -256,7 +227,7 @@ class ApiKeyService {
       values.push(keyId, userId);
 
       const stmt = this.db.prepare(`
-        UPDATE api_keys 
+        UPDATE api_keys
         SET ${updateFields.join(', ')}
         WHERE id = ? AND user_id = ?
       `);
@@ -286,13 +257,10 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Delete an API key
-   */
   async deleteApiKey(keyId, userId) {
     try {
       const stmt = this.db.prepare(`
-        DELETE FROM api_keys 
+        DELETE FROM api_keys
         WHERE id = ? AND user_id = ?
       `);
 
@@ -319,13 +287,10 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Deactivate an expired API key
-   */
   async deactivateApiKey(keyId) {
     try {
       const stmt = this.db.prepare(`
-        UPDATE api_keys 
+        UPDATE api_keys
         SET is_active = 0, updated_at = ?
         WHERE id = ?
       `);
@@ -342,13 +307,10 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Update key usage statistics
-   */
   async updateKeyUsage(keyId) {
     try {
       const stmt = this.db.prepare(`
-        UPDATE api_keys 
+        UPDATE api_keys
         SET last_used = ?, usage_count = usage_count + 1
         WHERE id = ?
       `);
@@ -363,13 +325,10 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Clean up expired API keys
-   */
   async cleanupExpiredKeys() {
     try {
       const stmt = this.db.prepare(`
-        UPDATE api_keys 
+        UPDATE api_keys
         SET is_active = 0, updated_at = ?
         WHERE expires_at < ? AND is_active = 1
       `);
@@ -393,21 +352,18 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Get API key statistics
-   */
   async getApiKeyStats(userId = null) {
     try {
       const whereClause = userId ? 'WHERE user_id = ?' : '';
       const params = userId ? [userId] : [];
 
       const stmt = this.db.prepare(`
-        SELECT 
+        SELECT
           COUNT(*) as total,
           SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
           SUM(CASE WHEN expires_at < ? THEN 1 ELSE 0 END) as expired,
           SUM(usage_count) as total_usage
-        FROM api_keys 
+        FROM api_keys
         ${whereClause}
       `);
 
@@ -430,16 +386,13 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Validate permissions array
-   */
   validatePermissions(permissions) {
     if (!Array.isArray(permissions)) {
       throw new Error('Permissions must be an array');
     }
 
     const validPermissions = [
-      'read', 'write', 'delete', 'admin', 
+      'read', 'write', 'delete', 'admin',
       'vectors:read', 'vectors:write', 'vectors:delete',
       'personas:read', 'personas:write', 'personas:delete'
     ];
@@ -455,9 +408,6 @@ class ApiKeyService {
     }
   }
 
-  /**
-   * Check if API key has specific permission
-   */
   hasPermission(apiKeyData, requiredPermission) {
     if (!apiKeyData || !apiKeyData.permissions) {
       return false;
@@ -465,17 +415,14 @@ class ApiKeyService {
 
     const permissions = apiKeyData.permissions;
 
-    // Admin permission grants all access
     if (permissions.includes('admin')) {
       return true;
     }
 
-    // Check for exact permission match
     if (permissions.includes(requiredPermission)) {
       return true;
     }
 
-    // Check for broader permissions
     if (requiredPermission.includes(':')) {
       const [resource, action] = requiredPermission.split(':');
       if (permissions.includes(action)) {

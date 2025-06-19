@@ -9,20 +9,15 @@ const OpenAIProvider = require('../services/embedding/OpenAIProvider');
 
 const router = express.Router();
 
-// Initialize services for personas (will be injected via middleware)
 let personaMemoryManager = null;
 
-// Middleware to initialize persona memory manager
 const initializePersonaServices = (req, res, next) => {
   if (!personaMemoryManager) {
-    // Initialize embedding service
     const embeddingService = new EmbeddingService();
-    
-    // Register local provider (always available as fallback)
+
     const localProvider = new LocalTransformersProvider();
     embeddingService.registerProvider('local', localProvider);
-    
-    // Register OpenAI provider if configured
+
     const embeddingProvider = process.env.EMBEDDING_PROVIDER || 'local';
     if (embeddingProvider === 'openai' && process.env.OPENAI_API_KEY) {
       try {
@@ -43,7 +38,6 @@ const initializePersonaServices = (req, res, next) => {
       }
     }
 
-    // Initialize hybrid persona memory manager
     personaMemoryManager = new HybridPersonaMemoryManager(
       req.database,
       req.vectorStore,
@@ -55,13 +49,8 @@ const initializePersonaServices = (req, res, next) => {
   next();
 };
 
-// Apply persona services middleware to all routes
 router.use(initializePersonaServices);
 
-/**
- * Create a new persona
- * POST /api/personas
- */
 router.post('/', asyncHandler(async (req, res) => {
   const {
     name,
@@ -69,17 +58,15 @@ router.post('/', asyncHandler(async (req, res) => {
     systemPrompt,
     config = {},
     maxMemorySize = 1000,
-    memoryDecayTime = 7 * 24 * 60 * 60 * 1000, // 7 days
+    memoryDecayTime = 7 * 24 * 60 * 60 * 1000,
     temperature = 0.7,
     maxTokens = 2048,
     embeddingProvider = 'local',
     embeddingModel
   } = req.body;
 
-  // Set appropriate default model based on provider
   const defaultEmbeddingModel = embeddingModel || (embeddingProvider === 'openai' ? 'text-embedding-3-small' : 'text-embedding-3-small');
 
-  // Validate required fields
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     throw new ValidationError('Name is required and must be a non-empty string');
   }
@@ -100,7 +87,7 @@ router.post('/', asyncHandler(async (req, res) => {
     throw new ValidationError('Max memory size must be between 10 and 10,000');
   }
 
-  if (memoryDecayTime < 60000 || memoryDecayTime > 365 * 24 * 60 * 60 * 1000) { // 1 minute to 1 year
+  if (memoryDecayTime < 60000 || memoryDecayTime > 365 * 24 * 60 * 60 * 1000) {
     throw new ValidationError('Memory decay time must be between 1 minute and 1 year');
   }
 
@@ -139,10 +126,6 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * List user personas
- * GET /api/personas
- */
 router.get('/', asyncHandler(async (req, res) => {
   const { include_inactive = false } = req.query;
 
@@ -165,27 +148,19 @@ router.get('/', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Get global persona statistics
- * GET /api/personas/_stats
- */
 router.get('/_stats', asyncHandler(async (req, res) => {
   try {
-    // Get all personas for the user
     const personas = await req.personaMemoryManager.listPersonas(req.user.id, true);
-    
-    // Calculate aggregate statistics
+
     let totalPersonas = personas.length;
     let activePersonas = personas.filter(p => p.isActive).length;
     let totalMemories = 0;
     let memoryTypeBreakdown = {};
-    
-    // Aggregate stats from all personas
+
     for (const persona of personas) {
       if (persona.memoryStats) {
         totalMemories += persona.memoryStats.totalMemories || 0;
-        
-        // Merge memory type breakdowns
+
         const breakdown = persona.memoryStats.memoryTypeBreakdown || {};
         Object.keys(breakdown).forEach(type => {
           memoryTypeBreakdown[type] = (memoryTypeBreakdown[type] || 0) + breakdown[type];
@@ -211,10 +186,6 @@ router.get('/_stats', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Get specific persona
- * GET /api/personas/:id
- */
 router.get('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { include_stats = true } = req.query;
@@ -249,15 +220,10 @@ router.get('/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Update persona
- * PUT /api/personas/:id
- */
 router.put('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
 
-  // Validate update fields
   if (updates.name !== undefined) {
     if (!updates.name || typeof updates.name !== 'string' || updates.name.trim().length === 0) {
       throw new ValidationError('Name must be a non-empty string');
@@ -308,10 +274,6 @@ router.put('/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Delete persona
- * DELETE /api/personas/:id
- */
 router.delete('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -340,10 +302,6 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Add memory to persona
- * POST /api/personas/:id/memories
- */
 router.post('/:id/memories', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
@@ -355,7 +313,6 @@ router.post('/:id/memories', asyncHandler(async (req, res) => {
     context = {}
   } = req.body;
 
-  // Validate input
   if (!content || typeof content !== 'string' || content.trim().length === 0) {
     throw new ValidationError('Content is required and must be a non-empty string');
   }
@@ -374,7 +331,6 @@ router.post('/:id/memories', asyncHandler(async (req, res) => {
   }
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const memoryContext = {
@@ -413,10 +369,6 @@ router.post('/:id/memories', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Search persona memories
- * POST /api/personas/:id/memories/search
- */
 router.post('/:id/memories/search', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
@@ -428,7 +380,6 @@ router.post('/:id/memories/search', asyncHandler(async (req, res) => {
     includeContext = true
   } = req.body;
 
-  // Validate input
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     throw new ValidationError('Query is required and must be a non-empty string');
   }
@@ -442,7 +393,6 @@ router.post('/:id/memories/search', asyncHandler(async (req, res) => {
   }
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const searchOptions = {
@@ -491,7 +441,7 @@ router.post('/:id/memories/search', asyncHandler(async (req, res) => {
         options: searchOptions,
         meta: {
           count: memories.length,
-          avgSimilarity: memories.length > 0 
+          avgSimilarity: memories.length > 0
             ? (memories.reduce((sum, m) => sum + m.similarity, 0) / memories.length).toFixed(3)
             : 0
         }
@@ -510,10 +460,6 @@ router.post('/:id/memories/search', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Add conversation exchange
- * POST /api/personas/:id/conversations
- */
 router.post('/:id/conversations', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
@@ -522,7 +468,6 @@ router.post('/:id/conversations', asyncHandler(async (req, res) => {
     conversationId
   } = req.body;
 
-  // Validate input
   if (!userMessage || typeof userMessage !== 'string' || userMessage.trim().length === 0) {
     throw new ValidationError('User message is required and must be a non-empty string');
   }
@@ -540,7 +485,6 @@ router.post('/:id/conversations', asyncHandler(async (req, res) => {
   }
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const exchange = await req.personaMemoryManager.addConversationExchange(
@@ -576,16 +520,11 @@ router.post('/:id/conversations', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Get conversation history
- * GET /api/personas/:id/conversations/:conversationId
- */
 router.get('/:id/conversations/:conversationId', asyncHandler(async (req, res) => {
   const { id, conversationId } = req.params;
   const { limit = 20 } = req.query;
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const history = await req.personaMemoryManager.getConversationHistory(
@@ -615,15 +554,10 @@ router.get('/:id/conversations/:conversationId', asyncHandler(async (req, res) =
   }
 }));
 
-/**
- * Get persona memory statistics
- * GET /api/personas/:id/stats
- */
 router.get('/:id/stats', asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const stats = await req.personaMemoryManager.getPersonaMemoryStats(id);
@@ -645,18 +579,12 @@ router.get('/:id/stats', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Cleanup expired memories for a persona
- * POST /api/personas/:id/cleanup
- */
 router.post('/:id/cleanup', asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
-    // Enforce memory limits (which includes cleanup)
     await req.personaMemoryManager.enforceMemoryLimits(id);
 
     logger.info('Persona memory cleanup triggered via API', {
@@ -681,12 +609,7 @@ router.post('/:id/cleanup', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Global memory cleanup (admin only)
- * POST /api/personas/_cleanup
- */
 router.post('/_cleanup', asyncHandler(async (req, res) => {
-  // Check if user has admin permissions
   if (!req.user.permissions.includes('admin')) {
     res.status(403).json({
       status: 'error',
@@ -714,14 +637,6 @@ router.post('/_cleanup', asyncHandler(async (req, res) => {
   }
 }));
 
-// =============================================================================
-// GRAPH ENDPOINTS - Zero Vector 2.0 Hybrid Capabilities
-// =============================================================================
-
-/**
- * Search entities in persona's knowledge graph
- * POST /api/personas/:id/graph/entities/search
- */
 router.post('/:id/graph/entities/search', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
@@ -731,7 +646,6 @@ router.post('/:id/graph/entities/search', asyncHandler(async (req, res) => {
     minConfidence = 0.0
   } = req.body;
 
-  // Validate input
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     throw new ValidationError('Query is required and must be a non-empty string');
   }
@@ -745,7 +659,6 @@ router.post('/:id/graph/entities/search', asyncHandler(async (req, res) => {
   }
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const searchOptions = {
@@ -792,10 +705,6 @@ router.post('/:id/graph/entities/search', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Find related entities in knowledge graph
- * GET /api/personas/:id/graph/entities/:entityId/related
- */
 router.get('/:id/graph/entities/:entityId/related', asyncHandler(async (req, res) => {
   const { id, entityId } = req.params;
   const {
@@ -806,7 +715,6 @@ router.get('/:id/graph/entities/:entityId/related', asyncHandler(async (req, res
     relationshipTypes
   } = req.query;
 
-  // Validate input
   if (parseInt(maxDepth) < 1 || parseInt(maxDepth) > 5) {
     throw new ValidationError('Max depth must be between 1 and 5');
   }
@@ -816,7 +724,6 @@ router.get('/:id/graph/entities/:entityId/related', asyncHandler(async (req, res
   }
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const searchOptions = {
@@ -865,10 +772,6 @@ router.get('/:id/graph/entities/:entityId/related', asyncHandler(async (req, res
   }
 }));
 
-/**
- * Get graph context for multiple entities
- * POST /api/personas/:id/graph/context
- */
 router.post('/:id/graph/context', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
@@ -878,7 +781,6 @@ router.post('/:id/graph/context', asyncHandler(async (req, res) => {
     relationshipDepth = 1
   } = req.body;
 
-  // Validate input
   if (!Array.isArray(entityIds) || entityIds.length === 0) {
     throw new ValidationError('Entity IDs must be a non-empty array');
   }
@@ -896,7 +798,6 @@ router.post('/:id/graph/context', asyncHandler(async (req, res) => {
   }
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const contextOptions = {
@@ -945,10 +846,6 @@ router.post('/:id/graph/context', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Enhanced memory search with graph expansion
- * POST /api/personas/:id/memories/search/hybrid
- */
 router.post('/:id/memories/search/hybrid', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
@@ -963,7 +860,6 @@ router.post('/:id/memories/search/hybrid', asyncHandler(async (req, res) => {
     graphWeight = 0.3
   } = req.body;
 
-  // Validate input
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     throw new ValidationError('Query is required and must be a non-empty string');
   }
@@ -985,7 +881,6 @@ router.post('/:id/memories/search/hybrid', asyncHandler(async (req, res) => {
   }
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
     const searchOptions = {
@@ -1005,9 +900,8 @@ router.post('/:id/memories/search/hybrid', asyncHandler(async (req, res) => {
       searchOptions
     );
 
-    // Calculate graph expansion statistics
     const graphExpandedResults = memories.filter(m => m.graphExpanded || m.graphBoosted).length;
-    const avgSimilarity = memories.length > 0 
+    const avgSimilarity = memories.length > 0
       ? (memories.reduce((sum, m) => sum + m.similarity, 0) / memories.length).toFixed(3)
       : 0;
 
@@ -1047,21 +941,14 @@ router.post('/:id/memories/search/hybrid', asyncHandler(async (req, res) => {
   }
 }));
 
-/**
- * Get persona knowledge graph statistics  
- * GET /api/personas/:id/graph/stats
- */
 router.get('/:id/graph/stats', asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Verify persona ownership
     await req.personaMemoryManager.getPersona(id, req.user.id);
 
-    // Get enhanced stats that include graph information
     const stats = await req.personaMemoryManager.getPersonaMemoryStats(id);
 
-    // Extract graph-specific stats
     const graphStats = stats.graphStats || {
       totalEntities: 0,
       totalRelationships: 0,
@@ -1098,7 +985,7 @@ router.get('/:id/graph/stats', asyncHandler(async (req, res) => {
           avgGraphProcessingTime: hybridFeatures.avgGraphProcessingTime || '0ms',
           totalHybridSearches: hybridFeatures.hybridSearches,
           totalGraphExpansions: hybridFeatures.graphExpansions,
-          expansionSuccessRate: hybridFeatures.hybridSearches > 0 
+          expansionSuccessRate: hybridFeatures.hybridSearches > 0
             ? ((hybridFeatures.graphExpansions / hybridFeatures.hybridSearches) * 100).toFixed(1) + '%'
             : '0%'
         }
